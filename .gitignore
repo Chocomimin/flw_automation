@@ -1,0 +1,11 @@
+node_modules/
+allure-results/
+allure-report/
+logs/
+*.log
+*.apk
+*.zip
+dist/
+build/
+.idea/
+.vscode/
