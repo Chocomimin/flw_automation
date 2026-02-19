@@ -8,7 +8,9 @@ const {
 } = require("./steps/householdSteps");
 
 // Import all form filling functions
-const { fillHouseholdFormWithExamples, submitForm } = require("./steps/householdFormSteps");
+const { fillHouseholdFormWithExamples } = require("./steps/householdFormSteps");
+// ✅ IMPORT THE NEW SECOND PAGE FUNCTION
+const { fillHeadOfFamilyFormWithExamples } = require("./steps/headOfFamilySteps");
 
 async function main() {
   const driver = await remote({
@@ -26,7 +28,7 @@ async function main() {
       "appium:autoGrantPermissions": true,
       "appium:newCommandTimeout": 300,
       "appium:language": "en",
-      "appium:locale": "US"
+      "appium:locale": "US",
     }
   });
 
@@ -36,7 +38,7 @@ async function main() {
     // Existing steps
     await selectEnglish(driver);
     await login(driver, "Amina", "Test@123");
-await driver.pause(5000); // wait for the next page to render
+    await driver.pause(5000); // wait for the next page to render
 
     // Diagnostic: ensure exported function exists (helps debug earlier TypeError)
     console.log("debug: selectVillage typeof=", typeof selectVillage);
@@ -52,12 +54,16 @@ await driver.pause(5000); // wait for the next page to render
     await clickNewHouseholdRegistration(driver);
     await acceptConsent(driver);
 
-    // 🏠 Fill ALL Household Form fields with example data
-    console.log("🚀 Starting to fill the form...");
+    // 🏠 1. Fill ALL Household Form fields with example data
+    console.log("🚀 Starting to fill the first form (Household)...");
     await fillHouseholdFormWithExamples(driver);
 
-    // Submit the form
-    await submitForm(driver);
+    // Pause briefly to let the app transition screens
+    await driver.pause(3000);
+
+    // 👨‍👩‍👦 2. Fill the second form (Head of Family)
+    console.log("🚀 Starting to fill the second form (Head of Family)...");
+    await fillHeadOfFamilyFormWithExamples(driver);
 
     console.log("🎉 Household registration completed successfully!");
 
