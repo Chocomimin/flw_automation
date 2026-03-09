@@ -1,136 +1,84 @@
-📱 Mitanin App – Appium Automation Project
+📱 FLW Application – Appium Automation Project
+This project automates the workflow of the org.piramalswasthya.sakhi.mitanin.uat Android application using:
 
-This project automates the Household Registration flow of the
-org.piramalswasthya.sakhi.mitanin.uat Android application using:
+🚀 Appium 🧪 WebdriverIO 📱 UiAutomator2 🟢 Node.js ## 📌 Project Overview
+This automation script has been expanded to perform multiple complete flows within the app, including:
 
-🚀 Appium
+Login and Village Selection
 
-🧪 WebdriverIO
+New Household Registration
 
-📱 UiAutomator2
+Adding Family Members
 
-🟢 Node.js
+Beneficiaries Management
 
-📌 Project Overview
+Eligible Couple Listing & Tracking
 
-This automation script performs the complete flow:
-
-Select Language (English)
-
-Login with valid credentials
-
-Select Village
-
-Navigate to All Household
-
-Start New Household Registration
-
-Accept Consent
-
-Fill Household Registration Form
-
-Submit Form
+Maternal Health & Pregnancy Registration
 
 🗂 Project Structure
-project-folder/
+Plaintext
+MithaaniAppium/
 │
-├── mainTest.js
+├── mainTest.js                        # Runs Household Registration flow
+├── memberAdding.js                    # Runs Family Member addition flow
+├── familyMemberWomenSteps.js          # Steps for female family members
+├── searchRahul.js                     # Search functionality test
 │
-└── steps/
+├── all_beneficiaries/
+│   └── beneficiaries.js               # Beneficiaries testing module
+│
+├── eligible_couple_list/
+│   ├── couple_list.js                 # Eligible couple list test
+│   └── couple_tracking.js             # Eligible couple tracking test
+│
+├── maternal_health/
+│   ├── maternalHealthSteps.js         # Maternal health execution flow
+│   └── pregnancyRegistrationForm.js   # Pregnancy form field handlers
+│
+└── steps/                             # Reusable Step Definitions
     ├── loginSteps.js
     ├── villageSteps.js
     ├── householdSteps.js
-    └── householdFormSteps.js
+    ├── householdFormSteps.js
+    └── headOfFamilySteps.js
+▶️ How to Run
+Depending on the specific flow you want to test, use the following commands in your terminal:
 
-📄 File Description
-1️⃣ mainTest.js
+1. Login to Household Registration
 
-Entry point of automation
+Bash
+node mainTest.js
+2. Add a Family Member
 
-Creates Appium driver session
+Bash
+node memberAdding.js
+3. Test Beneficiaries
 
-Calls all step functions
+Bash
+node all_beneficiaries/beneficiaries.js
+4. Test Eligible Couples
+(Run both files as needed for listing and tracking)
 
-Handles errors & screenshots
+Bash
+node eligible_couple_list/couple_list.js
+node eligible_couple_list/couple_tracking.js
+5. Test Pregnancy Registration (Maternal Health)
 
-2️⃣ loginSteps.js
+Bash
+node maternal_health/maternalHealthSteps.js
+📄 Core Modules Description
+mainTest.js & steps/: The entry point for the base automation. It handles Language selection (English), Login, Village selection, navigating to All Household, accepting consent, and filling/submitting the Household Registration Form.
 
-Handles:
+memberAdding.js: Extends the household flow by adding individual family members and defining the Head of Family.
 
-Language selection
+beneficiaries.js: Automates the verification and processing of the All Beneficiaries list.
 
-Username & Password entry
+couple_list.js & couple_tracking.js: Handles the Eligible Couple module, verifying list generation and tracking existing couples.
 
-Login button click
-
-Functions:
-
-selectEnglish(driver)
-
-login(driver, username, password)
-
-3️⃣ villageSteps.js
-
-Handles:
-
-Village dropdown selection
-
-Continue button click
-
-Function:
-
-selectVillage(driver, villageName)
-
-4️⃣ householdSteps.js
-
-Handles:
-
-Click All Household
-
-Click New Household Registration
-
-Accept Consent
-
-Functions:
-
-clickAllHousehold(driver)
-
-clickNewHouseholdRegistration(driver)
-
-acceptConsent(driver)
-
-5️⃣ householdFormSteps.js
-
-Handles complete form filling:
-
-Fields automated:
-
-First Name
-
-Last Name
-
-Mobile Number
-
-House No
-
-Ward No
-
-Ward Name
-
-Mohalla Name
-
-Economic Status (APL/BPL/Don’t Know)
-
-Residential Area (Rural/Urban)
-
-Submit Form
-
-Main Function:
-
-fillHouseholdFormWithExamples(driver)
+maternalHealthSteps.js & pregnancyRegistrationForm.js: Automates the Maternal Health module, specifically focusing on handling dynamic elements and complex scrolling for the Pregnancy Registration form.
 
 ⚙️ Prerequisites
-
 Make sure the following are installed:
 
 Node.js (v16+ recommended)
@@ -144,18 +92,15 @@ Real Android Device / Emulator
 Java JDK
 
 📦 Installation
+Bash
 npm install webdriverio
 npm install appium
+Start Appium server before running any tests:
 
-
-Start Appium server:
-
+Bash
 appium
-
-▶️ How to Run
-node mainTest.js
-
 🔧 Desired Capabilities Used
+JavaScript
 {
   platformName: "Android",
   automationName: "UiAutomator2",
@@ -166,40 +111,20 @@ node mainTest.js
   language: "en",
   locale: "US"
 }
-
-🧪 Test Flow Summary
-Launch App
-   ↓
-Select English
-   ↓
-Login
-   ↓
-Select Village
-   ↓
-All Household
-   ↓
-New Registration
-   ↓
-Accept Consent
-   ↓
-Fill Form
-   ↓
-Submit
-
 📸 Failure Handling
+Screenshots are automatically captured on failure.
 
-Screenshot automatically captured on failure
-
-Saved as:
-
-error-<timestamp>.png
+Saved in the root directory as: error-<timestamp>.png
 
 🛠 Features
-
 ✅ Modular Step Design
-✅ Reusable Functions
-✅ Explicit Waits
-✅ Error Handling
-✅ Screenshot Capture
-✅ Dropdown Validation
+
+✅ Reusable W3C Pointer Action Functions
+
+✅ Explicit Waits & Dynamic Scrolling
+
+✅ Error Handling & Screenshot Capture
+
+✅ Complex Dropdown & Calendar Validation
+
 ✅ Form Validation Check
