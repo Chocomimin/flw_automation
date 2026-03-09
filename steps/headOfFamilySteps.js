@@ -70,64 +70,55 @@ async function selectGender(driver, gender = "Male") {
 }
 
 // ✅ 4. Marital Status
+// ✅ 4. Marital Status (STRICT COORDINATES from 1080x2400 Screenshot)
 async function selectMaritalStatus(driver, value = "Married") {
-    // 1. Scroll to the element FIRST to make sure it's on screen
-    console.log("🔄 Scrolling to Marital Status...");
-    try {
-        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textMatches("(?i).*Marital Status.*"))');
-    } catch (e) {
-        console.log("⚠️ Scroll attempted but might already be in view.");
-    }
-    await driver.pause(1000);
+    console.log(`🔄 Attempting to select Marital Status: ${value} via strict coordinates...`);
 
-    // 2. Hide keyboard if it's open BEFORE interacting
+    // 1. Ensure keyboard is closed so the screen doesn't shift
     if (await driver.isKeyboardShown()) {
-        console.log("⚠️ Keyboard detected. Hiding it...");
         await driver.hideKeyboard();
         await driver.pause(1000);
     }
 
-    const dropdown = await driver.$('android=new UiSelector().className("android.widget.Spinner").textMatches("(?i).*Marital Status.*")');
-
-    // 3. Click the dropdown
-    console.log("👆 Clicking Marital Status dropdown...");
-    await dropdown.click();
-    await driver.pause(1500);
-
-    // 4. CHECK: Did clicking the dropdown accidentally open the keyboard?
-    if (await driver.isKeyboardShown()) {
-        console.log("⚠️ Keyboard popped up! Hiding it and clicking dropdown again...");
-        await driver.hideKeyboard();
-        await driver.pause(1000);
-        await dropdown.click(); // Re-open the menu
-        await driver.pause(1500);
-    }
-
-    // 5. Select Value (Coordinates)
-    const { width, height } = await driver.getWindowRect();
-    const x = Math.floor(width / 2);
-    let y;
-
-    switch (value) {
-        case "Unmarried": y = height * 0.50; break;
-        case "Married": y = height * 0.55; break;
-        case "Divorced": y = height * 0.60; break;
-        case "Separated": y = height * 0.65; break;
-        case "Widower": y = height * 0.70; break;
-        default: y = height * 0.50;
-    }
-
+    // 2. Click the Spinner to open the dropdown
+    // This taps the center of the Marital Status box (Bounds: [50,1124][1030,1255])
     await driver.performActions([{
         type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
         actions: [
-            { type: 'pointerMove', duration: 0, x, y: Math.floor(y) },
+            { type: 'pointerMove', duration: 0, x: 540, y: 1190 },
             { type: 'pointerDown', button: 0 },
-            { type: 'pause', duration: 250 },
+            { type: 'pause', duration: 100 },
             { type: 'pointerUp', button: 0 }
         ]
     }]);
     await driver.releaseActions();
-    console.log(`✅ Selected Marital Status: ${value}`);
+    await driver.pause(2000); // Wait for the dropdown animation to finish
+
+    // 3. Tap the specific option based on exact Y-coordinates
+    let tapY = 1450; // Default to Married
+
+    switch (value) {
+        case "Unmarried": tapY = 1320; break;
+        case "Married":   tapY = 1450; break;
+        case "Divorced":  tapY = 1580; break;
+        case "Separated": tapY = 1710; break; // This is exactly where the yellow box is in your image
+        case "Widower":   tapY = 1840; break;
+    }
+
+    console.log(`👆 Tapping ${value} at X: 540, Y: ${tapY}`);
+
+    await driver.performActions([{
+        type: 'pointer', id: 'finger2', parameters: { pointerType: 'touch' },
+        actions: [
+            { type: 'pointerMove', duration: 0, x: 540, y: tapY },
+            { type: 'pointerDown', button: 0 },
+            { type: 'pause', duration: 100 },
+            { type: 'pointerUp', button: 0 }
+        ]
+    }]);
+    await driver.releaseActions();
+    await driver.pause(1000);
+    console.log(`✅ Selected ${value}`);
 }
 
 // ✅ 5. Text Field Helpers
@@ -386,7 +377,7 @@ async function fillHeadOfFamilyFormWithExamples(driver, targetMaritalStatus = "M
         console.log(`ℹ️ Marital status is ${targetMaritalStatus}, skipping Wife's Name and Age At Marriage.`);
     }
 
-    await fillFatherName(driver, "Rajesh Sharma");
+    await fillFatherName(driver, "Ram Sharma");
     await fillMotherName(driver, "Sunita Sharma");
     await selectCommunity(driver, "General");
     await selectReligion(driver, "Hindu");

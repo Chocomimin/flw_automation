@@ -48,7 +48,7 @@ async function main() {
     }
 
     await selectVillage(driver, "Dakhinhengra TE");
-
+    await driver.pause(1000);
     // Household steps
     await clickAllHousehold(driver);
     await clickNewHouseholdRegistration(driver);

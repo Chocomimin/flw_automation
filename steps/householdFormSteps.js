@@ -78,11 +78,10 @@ async function selectEconomicStatus(driver, status) {
     console.log(`✅ Economic Status selected: ${status}`);
 }
 
-async function selectResidentialArea(driver, value = "Other") {
+async function selectResidentialArea(driver, value = "Rural") {
     await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Household Details"))');
     await driver.pause(1000);
 
-    // 🆕 Simplified Spinner Locator
     const dropdownBtn = await driver.$('android=new UiSelector().className("android.widget.Spinner").textContains("Type of residential area")');
     await dropdownBtn.waitForDisplayed({ timeout: 10000 });
     await dropdownBtn.click();
@@ -100,12 +99,14 @@ async function selectResidentialArea(driver, value = "Other") {
     const x = Math.floor(width / 2);
     let y;
 
+    // ⬇️ UPDATED COORDINATES BASED ON THE NEW DROPDOWN UI ⬇️
     switch (value) {
-        case "Urban": y = Math.floor(height * 0.666); break;
-        case "Rural": y = Math.floor(height * 0.65); break;
-        case "Tribal": y = Math.floor(height * 0.77); break;
-        case "Other": y = Math.floor(height * 0.80); break;
-        default: y = Math.floor(height * 0.77);
+        case "Rural": y = Math.floor(height * 0.63); break;
+        case "Urban": y = Math.floor(height * 0.67); break;
+        case "Tribal": y = Math.floor(height * 0.71); break;
+        case "Other": y = Math.floor(height * 0.75); break;       // Shifted up from 0.80
+        case "Tea Garden": y = Math.floor(height * 0.80); break;  // 0.80 now correctly maps here
+        default: y = Math.floor(height * 0.75);
     }
 
     await driver.performActions([{
@@ -267,7 +268,7 @@ async function selectPrimaryWaterSource(driver, value = "Tank") {
     console.log(`✅ Water source selected: ${value}`);
 }
 
-async function selectElectricityAvailability(driver, value ="Other") {
+async function selectElectricityAvailability(driver, value ="Electricity Supply") {
     await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Availability of Electricity"))');
     await driver.pause(1000);
 
@@ -368,7 +369,7 @@ async function selectToiletAvailability(driver, value = "Flush toilet with runni
 async function fillHouseholdFormWithExamples(driver) {
     console.log("📝 Filling household form with example data...");
 
-    await fillFirstName(driver, "Rahul");
+    await fillFirstName(driver, "arun");
     await fillLastName(driver, "Sharma");
     await fillMobileNumber(driver, "9876543210");
     await fillHouseNo(driver, "42");
@@ -377,13 +378,13 @@ async function fillHouseholdFormWithExamples(driver) {
     await fillMohallaName(driver, "New Colony");
 
     await selectEconomicStatus(driver, "APL");
-    await selectResidentialArea(driver, "Other");
+    await selectResidentialArea(driver, "Rural");
     await selectTypeOfHouse(driver, "None");
     await selectHouseOwnership(driver, "Yes");
     await selectSeparateKitchen(driver,"Yes");
     await selectTypeOfFuel(driver, "Crop Residue");
     await selectPrimaryWaterSource(driver, "Tank");
-    await selectElectricityAvailability(driver, "Other");
+    await selectElectricityAvailability(driver, "Electricity Supply");
     await selectToiletAvailability(driver, "Flush toilet with running water");
 
     if (await driver.isKeyboardShown()) {
