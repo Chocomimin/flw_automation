@@ -1,10 +1,17 @@
 📱 FLW Application – Appium Automation Project
-
 Automation Framework for the FLW Android Application
 
 This project automates the workflow of the FLW Application Android application using modern mobile automation tools.
 
-The automation scripts simulate real user interactions to validate multiple operational workflows such as Household Registration, Beneficiaries Management, Eligible Couple Tracking, and Maternal Health Registration.
+The automation scripts simulate real user interactions to validate multiple operational workflows such as:
+
+Household Registration
+
+Beneficiaries Management
+
+Eligible Couple Tracking
+
+Maternal Health Registration
 
 🚀 Technology Stack
 
@@ -18,13 +25,15 @@ This automation framework is built using:
 
 🟢 Node.js
 
-These tools allow reliable automation of Android applications with scalable test architecture.
+These tools allow reliable automation of Android applications with a scalable test architecture.
 
-Table of contents
+Table of Contents
 
 Overview
 
 Configuration
+
+Project Structure
 
 Usage
 
@@ -74,17 +83,44 @@ Android Emulator or Physical Device
 Install Dependencies
 npm install
 
-Install required automation libraries:
+Install required automation libraries if needed:
 
 npm install webdriverio
 npm install appium
 
-Start the Appium server:
+Start the Appium server before running tests:
 
 appium
+📂 Project Structure
+MithaaniAppium
+│
+├── mainTest.js
+├── memberAdding.js
+├── familyMemberWomenSteps.js
+├── searchRahul.js
+│
+├── all_beneficiaries
+│   └── beneficiaries.js
+│
+├── eligible_couple_list
+│   ├── couple_list.js
+│   └── couple_tracking.js
+│
+├── maternal_health
+│   ├── maternalHealthSteps.js
+│   ├── pregnancyRegistrationForm.js
+│   ├── Anc_visits.js
+│   └── Pnc_list.js
+│
+└── steps
+    ├── loginSteps.js
+    ├── villageSteps.js
+    ├── householdSteps.js
+    ├── householdFormSteps.js
+    └── headOfFamilySteps.js
 Usage
 
-Navigate to the project directory and run the required automation script.
+Navigate to the project directory and run the required automation script depending on the flow you want to test.
 
 Login & Household Registration
 node mainTest.js
@@ -230,10 +266,11 @@ If automation fails:
 
 A screenshot is automatically captured
 
-Saved in the root directory
+Saved in the project root directory
 
 Example:
 
 error-1718452992.png
 
 This helps in debugging failed automation steps.
+
