@@ -5,11 +5,12 @@ const capabilities = {
     platformName: 'Android',
     'appium:automationName': 'UiAutomator2',
     'appium:deviceName': 'ZD222X4TDK',
-    'appium:appPackage': 'org.piramalswasthya.sakhi.mitanin.uat',
+    'appium:appPackage': 'org.piramalswasthya.sakhi.saksham.uat',
     'appium:appActivity': 'org.piramalswasthya.sakhi.ui.login_activity.LoginActivity',
     'appium:noReset': true,
-    'appium:enforceXPath1': true
+    'appium:enforceXPath1': true   // ✅ FIX 2: Enable XPath1
 };
+
 
 // --- Reusable Automation Functions ---
 
