@@ -79,67 +79,74 @@ This framework automates critical workflows including patient registration, hous
 ## 📐 Project Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    TEST EXECUTION LAYER                         │
-│              (mainTest.js / Individual Spec Files)              │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    WORKFLOW MODULES                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
-│  │  Beneficiary │  │Eligible Couple│  │   Maternal Health    │  │
-│  │  Management  │  │   & Tracking  │  │  (ANC / PNC / Preg) │  │
-│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      STEPS LAYER                                │
-│  ┌───────────┐ ┌──────────┐ ┌───────────┐ ┌─────────────────┐ │
-│  │  loginSteps│ │villageSteps│ │householdSteps│ │headOfFamilySteps│ │
-│  └───────────┘ └──────────┘ └───────────┘ └─────────────────┘ │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   APPIUM / WEBDRIVERIO                          │
-│              WebDriver Protocol  ◄──►  UiAutomator2             │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              ANDROID DEVICE / EMULATOR (ADB)                    │
-│                    FLW Application APK                          │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────┐
+│       TEST EXECUTION          │
+│   mainTest.js / Spec Files    │
+└───────────────┬───────────────┘
+                │
+                ▼
+┌───────────────────────────────┐
+│         LOGIN MODULE          │
+│        (loginSteps.js)        │
+└───────────────┬───────────────┘
+                │
+                ▼
+┌───────────────────────────────┐
+│      VILLAGE SELECTION        │
+│       (villageSteps.js)       │
+└───────────────┬───────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────┐
+│               HOME DASHBOARD                 │
+│                 12 MODULES                   │
+│                                              │
+│ 1. All Households                            │
+│ 2. All Beneficiaries                         │
+│ 3. Eligible Couple                           │
+│ 4. Maternal Health                           │
+│ 5. Child Care                                │
+│ 6. Disease Control                           │
+│ 7. Communicable Disease                      │
+│ 8. Routine Immunization                      │
+│ 9. High Risk Assessments                     │
+│ 10. General OPD Care List                    │
+│ 11. Death Report                             │
+│ 12. ASHA / Village Mapping                   │
+└───────────────┬──────────────────────────────┘
+                │
+                ▼
+┌───────────────────────────────┐
+│        APPIUM SERVER          │
+│       + WebdriverIO           │
+└───────────────┬───────────────┘
+                │
+                ▼
+┌───────────────────────────────┐
+│      ANDROID DEVICE /         │
+│          EMULATOR             │
+│      (FLW Android App)        │
+└───────────────────────────────┘
 ```
-
 ### 🔄 Data Flow
 
 ```
 Test Entry Point
     │
-    ├─► Login & Language Selection
+    ├─► Login
     │         │
-    │         └─► Village Selection
+    │         └─► Select Vilage
     │                   │
-    │                   └─► Household Registration
-    │                               │
-    │                   ┌───────────┴───────────┐
-    │                   ▼                       ▼
-    │           Add Family Members      Beneficiary Management
-    │                   │                       │
-    │           ┌───────┴──────┐    ┌──────────┴──────────┐
-    │           ▼              ▼    ▼                      ▼
-    │     Maternal Health  Eligible   Couple           PNC List
-    │     Registration     Couple     Tracking
-    │           │
-    │    ┌──────┴──────┐
-    │    ▼             ▼
-    │  Pregnancy     ANC Visits
-    │  Registration
-    │
-    └─► Test Reports & Screenshots
+    │                   └─► Home (Dashboard)
+    │                             │
+    │                             ├─► All Beneficiaries (Search, Filter)
+    │                             ├─► Eligible Couple List (Registration, Tracking)
+    │                             ├─► Maternal Health (PW Registration, ANC, PNC, etc.)
+    │                             ├─► Child Care (Newborn, Child, Adolescent, Under 5)
+    │                             ├─► Disease Control (NCD, Malaria, Kala Azar, etc.)
+    │                             ├─► Communicable Diseases (TB Screening, etc.)
+    │                             ├─► Routine Immunization
+    │                             └─► High Risk Assessment (PW & Non-PW)
 ```
 
 ---
