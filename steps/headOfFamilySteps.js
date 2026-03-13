@@ -36,7 +36,7 @@ async function fillAgeAndDOB(driver, years) {
     await ageField.click();
 
     console.log("⏳ Waiting for Date/Age picker popup...");
-    const okBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/btn_ok")');
+    const okBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_ok")');
     await okBtn.waitForDisplayed({ timeout: 10000 });
 
     const numberInputs = await driver.$$('android=new UiSelector().resourceId("android:id/numberpicker_input")');
@@ -69,85 +69,74 @@ async function selectGender(driver, gender = "Male") {
     console.log(`✅ Gender selected: ${gender}`);
 }
 
-// ✅ 4. Marital Status
-// ✅ 4. Marital Status (STRICT COORDINATES from 1080x2400 Screenshot)
+// ✅ 4. Marital Status (UPDATED with correct coordinates from new screenshot)
 async function selectMaritalStatus(driver, value = "Married") {
-    console.log(`🔄 Attempting to select Marital Status: ${value} via strict coordinates...`);
+    console.log(`🔄 Attempting to select Marital Status: ${value}...`);
 
-    // 1. Ensure keyboard is closed so the screen doesn't shift
+    // 1. Ensure keyboard is closed
     if (await driver.isKeyboardShown()) {
         await driver.hideKeyboard();
         await driver.pause(1000);
     }
 
-    // 2. Click the Spinner to open the dropdown
-    // This taps the center of the Marital Status box (Bounds: [50,1124][1030,1255])
-    await driver.performActions([{
-        type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
-        actions: [
-            { type: 'pointerMove', duration: 0, x: 540, y: 1190 },
-            { type: 'pointerDown', button: 0 },
-            { type: 'pause', duration: 100 },
-            { type: 'pointerUp', button: 0 }
-        ]
-    }]);
-    await driver.releaseActions();
-    await driver.pause(2000); // Wait for the dropdown animation to finish
+    // 2. Scroll to Marital Status
+    console.log("🔄 Scrolling down to Marital Status...");
+    try {
+        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Marital Status"))');
+        await driver.pause(1000);
+    } catch (e) { }
 
-    // 3. Tap the specific option based on exact Y-coordinates
-    let tapY = 1450; // Default to Married
-
-    switch (value) {
-        case "Unmarried": tapY = 1320; break;
-        case "Married":   tapY = 1450; break;
-        case "Divorced":  tapY = 1580; break;
-        case "Separated": tapY = 1710; break; // This is exactly where the yellow box is in your image
-        case "Widower":   tapY = 1840; break;
+    // 3. Open the Dropdown dynamically
+    console.log("👆 Clicking Marital Status dropdown...");
+    try {
+        const dropdown = await driver.$('android=new UiSelector().className("android.widget.Spinner").textContains("Marital Status")');
+        await dropdown.waitForDisplayed({ timeout: 5000 });
+        await dropdown.click();
+    } catch (e) {
+        console.log("⚠️ Could not find Marital Status spinner normally, trying alternate locator...");
+        const altDropdown = await driver.$('android=new UiSelector().textContains("Marital Status").fromParent(new UiSelector().description("Show dropdown menu"))');
+        await altDropdown.click();
     }
+    await driver.pause(2000);
 
-    console.log(`👆 Tapping ${value} at X: 540, Y: ${tapY}`);
+    // 4. Click the exact option. We try dynamic text first, then fallback to fixed coordinates from your screenshot.
+    try {
+        // Appium can often see the text inside the popup natively
+        const option = await driver.$(`android=new UiSelector().textContains("${value}")`);
+        await option.waitForDisplayed({ timeout: 3000 });
+        await option.click();
+        console.log(`✅ Selected ${value} via text locator`);
+    } catch (e) {
+        console.log(`⚠️ Text locator failed, falling back to coordinates for ${value}...`);
 
-    await driver.performActions([{
-        type: 'pointer', id: 'finger2', parameters: { pointerType: 'touch' },
-        actions: [
-            { type: 'pointerMove', duration: 0, x: 540, y: tapY },
-            { type: 'pointerDown', button: 0 },
-            { type: 'pause', duration: 100 },
-            { type: 'pointerUp', button: 0 }
-        ]
-    }]);
-    await driver.releaseActions();
+        // NEW COORDINATES: Calculated exactly from the provided image
+        // Assuming a standard 1080x2400 resolution. The popup opens in the lower half.
+        let tapY = 1510;
+
+        switch (value) {
+            case "Unmarried": tapY = 1400; break;
+            case "Married":   tapY = 1510; break;
+            case "Divorced":  tapY = 1620; break;
+            case "Separated": tapY = 1730; break;
+            case "Widower":   tapY = 1840; break;
+        }
+
+        console.log(`👆 Tapping ${value} at X: 540, Y: ${tapY}`);
+        await driver.performActions([{
+            type: 'pointer', id: 'finger2', parameters: { pointerType: 'touch' },
+            actions: [
+                { type: 'pointerMove', duration: 0, x: 540, y: tapY },
+                { type: 'pointerDown', button: 0 },
+                { type: 'pause', duration: 100 },
+                { type: 'pointerUp', button: 0 }
+            ]
+        }]);
+    }
     await driver.pause(1000);
-    console.log(`✅ Selected ${value}`);
+    console.log(`✅ Marital Status selection completed.`);
 }
 
-// ✅ 5. Text Field Helpers
-async function fillWifesName(driver, wifeName) {
-    const upperCaseWifeName = wifeName.toUpperCase();
-    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
-
-    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Wife\'s Name"))');
-    const wifeField = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Wife\'s Name")');
-
-    await wifeField.click();
-    await wifeField.setValue(upperCaseWifeName);
-
-    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
-    console.log(`✅ Wife's Name entered: ${upperCaseWifeName}`);
-}
-
-async function fillAgeAtMarriage(driver, ageAtMarriage) {
-    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
-
-    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Age At Marriage"))');
-    const ageMarriageField = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Age At Marriage")');
-
-    await ageMarriageField.click();
-    await ageMarriageField.setValue(ageAtMarriage);
-
-    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
-    console.log(`✅ Age At Marriage entered: ${ageAtMarriage}`);
-}
+// ✅ 5. Text Field Helpers (UPDATED for dynamic checking)
 
 async function fillFatherName(driver, fatherName) {
     if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
@@ -162,9 +151,7 @@ async function fillFatherName(driver, fatherName) {
     console.log(`✅ Father's Name entered: ${fatherName}`);
 }
 
-// ✅ 5. Text Field Helpers (Updated to close keyboard immediately)
 async function fillMotherName(driver, motherName) {
-    // 1. Check/Hide keyboard before starting
     if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
 
     await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Mother\'s Name"))');
@@ -173,8 +160,6 @@ async function fillMotherName(driver, motherName) {
     await motherField.click();
     await motherField.setValue(motherName);
 
-    // 2. 🛑 IMPORTANT: Close keyboard immediately after typing!
-    // This prevents the "scroll up" issue in the next step.
     console.log("⌨️ Hiding keyboard after typing Mother's Name...");
     if (await driver.isKeyboardShown()) {
         await driver.hideKeyboard();
@@ -183,13 +168,96 @@ async function fillMotherName(driver, motherName) {
     console.log(`✅ Mother's Name entered: ${motherName}`);
 }
 
-// ✅ 6. Community Selection (FIXED: Close Keyboard -> Then Scroll)
+// 🆕 DYNAMIC: Checks for Husband or Wife's name, fills if exists, skips if not.
+async function fillSpouseNameIfExists(driver, spouseName) {
+    console.log("🔍 Checking if Husband's or Wife's Name field is present...");
+    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
+
+    try {
+        // Scroll a bit to make sure the field is in view if it exists
+        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollForward()');
+    } catch (e) {}
+
+    const wifeField = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Wife\'s Name")');
+    const husbandField = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Husband\'s Name")');
+
+    let fieldToFill = null;
+    let fieldNameStr = "";
+
+    if (await wifeField.isExisting()) {
+        fieldToFill = wifeField;
+        fieldNameStr = "Wife's Name";
+    } else if (await husbandField.isExisting()) {
+        fieldToFill = husbandField;
+        fieldNameStr = "Husband's Name";
+    }
+
+    if (fieldToFill) {
+        console.log(`✅ Found ${fieldNameStr} field. Filling it...`);
+        await fieldToFill.click();
+        await fieldToFill.setValue(spouseName.toUpperCase());
+
+        if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
+        console.log(`✅ ${fieldNameStr} entered: ${spouseName.toUpperCase()}`);
+    } else {
+        console.log("⏭️ Neither Husband's nor Wife's Name field is present. Moving next.");
+    }
+}
+
+// 🆕 DYNAMIC: Checks for Age At Marriage, fills if exists, skips if not.
+async function fillAgeAtMarriageIfExists(driver, ageAtMarriage) {
+    console.log("🔍 Checking if Age At Marriage field is present...");
+    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
+
+    const ageMarriageField = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Age at the time of marriage")');
+
+    if (await ageMarriageField.isExisting()) {
+        console.log("✅ Found Age At Marriage field. Filling it...");
+        await ageMarriageField.click();
+        await ageMarriageField.setValue(ageAtMarriage);
+
+        if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
+        console.log(`✅ Age At Marriage entered: ${ageAtMarriage}`);
+    } else {
+        console.log("⏭️ Age At Marriage field not present. Moving next.");
+    }
+}
+
+// 🆕 DYNAMIC: Checks for "Do you have children?", selects option if exists, skips if not.
+async function selectHaveChildrenIfExists(driver, hasChildren = "Yes") {
+    console.log("🔍 Checking if 'Do you have children?' field is present...");
+    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
+
+    try {
+        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollForward()');
+    } catch (e) {}
+
+    const questionText = await driver.$('android=new UiSelector().textContains("Do you have children")');
+
+    if (await questionText.isExisting()) {
+        console.log(`✅ Found 'Do you have children?' field. Selecting ${hasChildren}...`);
+
+        const optionBtn = await driver.$(`android=new UiSelector().className("android.widget.RadioButton").text("${hasChildren}")`);
+        if (await optionBtn.isExisting()) {
+            await optionBtn.click();
+            console.log(`✅ Selected '${hasChildren}' for children.`);
+        } else {
+            console.log(`⚠️ Option '${hasChildren}' not found.`);
+        }
+    } else {
+        console.log("⏭️ 'Do you have children?' field not present. Moving next.");
+    }
+}
+
+
+// ✅ 6. Community Selection (UPDATED: Exact Coordinates based on new screenshot)
+// ✅ 6. Community Selection (UPDATED: Exact Coordinates based on new screenshot)
 async function selectCommunity(driver, value = "General") {
     // 1. 🛑 STEP 1: Close Keyboard FIRST (Before scrolling)
     if (await driver.isKeyboardShown()) {
         console.log("⚠️ Keyboard detected. Hiding it to prevent scroll issues...");
         await driver.hideKeyboard();
-        await driver.pause(1500); // Wait for screen to expand back to full size
+        await driver.pause(1500);
     }
 
     // 2. 🔄 STEP 2: Scroll Down (Now that screen is full size)
@@ -224,37 +292,51 @@ async function selectCommunity(driver, value = "General") {
         await driver.pause(1500);
     }
 
-    // 6. Select Value (Coordinates)
-    const { width, height } = await driver.getWindowRect();
-    const x = Math.floor(width / 2);
-    let y;
+    // 6. Select Value
+    // First, try to click using the exact text natively (Most reliable)
+    try {
+        let textToFind = value;
+        if (value === "PVTG") textToFind = "PVTG"; // Matches "PVTG – Primitive Vulnerable Tribal Groups"
 
-    switch (value) {
-        case "General": y = height * 0.40; break;
-        case "SC": y = height * 0.47; break;
-        case "ST": y = height * 0.54; break;
-        case "BC": y = height * 0.61; break;
-        case "OBC": y = height * 0.68; break;
-        case "OC": y = height * 0.75; break;
-        case "PVTG": y = height * 0.82; break;
-        case "Not given": y = height * 0.88; break;
-        default: y = height * 0.40;
+        const option = await driver.$(`android=new UiSelector().textContains("${textToFind}")`);
+        await option.waitForDisplayed({ timeout: 3000 });
+        await option.click();
+        console.log(`✅ Selected ${value} via text locator`);
+    } catch (e) {
+        console.log(`⚠️ Text locator failed, falling back to coordinates for ${value}...`);
+
+        // NEW COORDINATES: Mapped to the updated screenshot where the popup opens over the middle
+        let tapY = 1000; // Default to General
+
+        switch (value) {
+            case "General": tapY = 1000; break;
+            case "SC": tapY = 1100; break;
+            case "ST": tapY = 1210; break;
+            case "BC": tapY = 1320; break;
+            case "OBC": tapY = 1430; break;
+            case "OC": tapY = 1540; break;
+            case "PVTG": tapY = 1650; break;
+            case "Not given": tapY = 1760; break;
+        }
+
+        console.log(`👆 Tapping Community '${value}' at X: 540, Y: ${tapY}`);
+
+        await driver.performActions([{
+            type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
+            actions: [
+                { type: 'pointerMove', duration: 0, x: 540, y: tapY },
+                { type: 'pointerDown', button: 0 },
+                { type: 'pause', duration: 250 },
+                { type: 'pointerUp', button: 0 }
+            ]
+        }]);
     }
 
-    await driver.performActions([{
-        type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
-        actions: [
-            { type: 'pointerMove', duration: 0, x, y: Math.floor(y) },
-            { type: 'pointerDown', button: 0 },
-            { type: 'pause', duration: 250 },
-            { type: 'pointerUp', button: 0 }
-        ]
-    }]);
-    await driver.releaseActions();
+    await driver.pause(1000);
     console.log(`✅ Selected Community: ${value}`);
 }
 
-// ✅ 7. Religion Selection (FIXED: Close Keyboard -> Then Scroll)
+// ✅ 7. Religion Selection (UPDATED with Hardcoded Coordinates based on new screenshot)
 async function selectReligion(driver, value = "Hindu") {
     // 1. 🛑 STEP 1: Close Keyboard FIRST
     if (await driver.isKeyboardShown()) {
@@ -293,32 +375,42 @@ async function selectReligion(driver, value = "Hindu") {
     }
 
     // 6. Select Value
-    const { width, height } = await driver.getWindowRect();
-    const x = Math.floor(width / 2);
-    let y;
+    try {
+        const option = await driver.$(`android=new UiSelector().textContains("${value}")`);
+        await option.waitForDisplayed({ timeout: 3000 });
+        await option.click();
+        console.log(`✅ Selected ${value} via text locator`);
+    } catch (e) {
+        console.log(`⚠️ Text locator failed, falling back to coordinates for ${value}...`);
 
-    switch (value) {
-        case "Hindu": y = height * 0.40; break;
-        case "Muslim": y = height * 0.47; break;
-        case "Christian": y = height * 0.54; break;
-        case "Sikhism": y = height * 0.61; break;
-        case "Buddhism": y = height * 0.68; break;
-        case "Jainism": y = height * 0.75; break;
-        case "Parsi": y = height * 0.82; break;
-        case "Other": y = height * 0.89; break;
-        case "Not disclosed": y = height * 0.92; break;
-        default: y = height * 0.40;
+        // NEW COORDINATES: Mapped precisely to the updated Religion screenshot
+        let tapY = 1040; // Default to Hindu
+
+        switch (value) {
+            case "Hindu": tapY = 1040; break;
+            case "Muslim": tapY = 1150; break;
+            case "Christian": tapY = 1260; break;
+            case "Sikhism": tapY = 1370; break;
+            case "Buddhism": tapY = 1480; break;
+            case "Jainism": tapY = 1590; break;
+            case "Parsi": tapY = 1700; break;
+            case "Other": tapY = 1810; break;
+            case "Not disclosed": tapY = 1920; break;
+            default: tapY = 1040;
+        }
+
+        console.log(`👆 Tapping Religion '${value}' at X: 540, Y: ${tapY}`);
+        await driver.performActions([{
+            type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
+            actions: [
+                { type: 'pointerMove', duration: 0, x: 540, y: tapY },
+                { type: 'pointerDown', button: 0 },
+                { type: 'pause', duration: 250 },
+                { type: 'pointerUp', button: 0 }
+            ]
+        }]);
     }
 
-    await driver.performActions([{
-        type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
-        actions: [
-            { type: 'pointerMove', duration: 0, x, y: Math.floor(y) },
-            { type: 'pointerDown', button: 0 },
-            { type: 'pause', duration: 250 },
-            { type: 'pointerUp', button: 0 }
-        ]
-    }]);
     await driver.releaseActions();
     console.log(`✅ Selected Religion: ${value}`);
 }
@@ -334,7 +426,7 @@ async function submitFinalForm(driver) {
 
     // 2. Find and click the FIRST Submit button on the main form
     try {
-        const firstSubmitButton = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/btn_submit")');
+        const firstSubmitButton = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_submit")');
         await firstSubmitButton.waitForDisplayed({ timeout: 5000 });
         await firstSubmitButton.click();
         console.log("✅ First Submit button clicked. Waiting for Preview screen...");
@@ -350,7 +442,7 @@ async function submitFinalForm(driver) {
 
     // 3. Find and click the SECOND Submit button on the Preview Screen
     try {
-        const finalSubmitButton = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/btnSubmitPreview")');
+        const finalSubmitButton = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btnSubmitPreview")');
         await finalSubmitButton.waitForDisplayed({ timeout: 5000 });
         await finalSubmitButton.click();
         console.log("✅ Final Submit button clicked (Preview Screen)");
@@ -358,30 +450,101 @@ async function submitFinalForm(driver) {
         console.log("❌ Could not find the Final Submit button on Preview Screen!");
     }
 }
+
+// ✅ 8. Status Of Women Selection
+async function selectStatusOfWomen(driver, value = "Eligible Couple") {
+    // 1. 🛑 STEP 1: Close Keyboard FIRST
+    if (await driver.isKeyboardShown()) {
+        await driver.hideKeyboard();
+        await driver.pause(1500);
+    }
+
+    // 2. 🔄 STEP 2: Scroll Down
+    console.log("🔄 Scrolling down to Status Of Women...");
+    try {
+        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Status Of Women"))');
+    } catch (e) {}
+    await driver.pause(1000);
+
+    // 3. Find Dropdown
+    let dropdown;
+    try {
+        dropdown = await driver.$('android=new UiSelector().className("android.widget.Spinner").textContains("Status Of Women")');
+        await dropdown.waitForDisplayed({ timeout: 5000 });
+    } catch(e) {
+        dropdown = await driver.$('android=new UiSelector().textContains("Status Of Women").fromParent(new UiSelector().description("Show dropdown menu"))');
+    }
+
+    // 4. Click Dropdown
+    console.log("👆 Clicking Status Of Women dropdown...");
+    await dropdown.click();
+    await driver.pause(1500);
+
+    // 5. Check: Did keyboard pop up?
+    if (await driver.isKeyboardShown()) {
+        console.log("⚠️ Keyboard popped up! Hiding it and clicking dropdown again...");
+        await driver.hideKeyboard();
+        await driver.pause(1000);
+        await dropdown.click();
+        await driver.pause(1500);
+    }
+
+    // 6. Select Value
+    try {
+        const option = await driver.$(`android=new UiSelector().textContains("${value}")`);
+        await option.waitForDisplayed({ timeout: 3000 });
+        await option.click();
+        console.log(`✅ Selected ${value} via text locator`);
+    } catch (e) {
+        console.log(`⚠️ Text locator failed, falling back to coordinates for ${value}...`);
+
+        // NEW COORDINATES: Mapped to the Status Of Women screenshot (popup opens upwards)
+        let tapY = 1620; // Default to Eligible Couple
+
+        switch (value) {
+            case "Eligible Couple": tapY = 1620; break;
+            case "Pregnant Woman": tapY = 1730; break;
+            case "Postnatal Mother": tapY = 1840; break;
+            case "Permanently Sterilised": tapY = 1950; break;
+            default: tapY = 1620;
+        }
+
+        console.log(`👆 Tapping Status Of Women '${value}' at X: 540, Y: ${tapY}`);
+        await driver.performActions([{
+            type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
+            actions: [
+                { type: 'pointerMove', duration: 0, x: 540, y: tapY },
+                { type: 'pointerDown', button: 0 },
+                { type: 'pause', duration: 250 },
+                { type: 'pointerUp', button: 0 }
+            ]
+        }]);
+    }
+
+    await driver.releaseActions();
+    console.log(`✅ Selected Status Of Women: ${value}`);
+}
+
 // ✅ 9. Master Function
 async function fillHeadOfFamilyFormWithExamples(driver, targetMaritalStatus = "Married") {
     console.log("📝 Filling Head of Family form with example data...");
 
     await handleConsentForm(driver);
     await fillAgeAndDOB(driver, "26");
-    await selectGender(driver, "Male");
+    await selectGender(driver, "Female");
     await selectMaritalStatus(driver, targetMaritalStatus);
-
-    const requiresSpouseDetails = ["Married", "Divorced", "Widower"].includes(targetMaritalStatus);
-
-    if (requiresSpouseDetails) {
-        console.log(`ℹ️ Marital status is ${targetMaritalStatus}, filling spouse details...`);
-        await fillWifesName(driver, "priya sharma");
-        await fillAgeAtMarriage(driver, "22");
-    } else {
-        console.log(`ℹ️ Marital status is ${targetMaritalStatus}, skipping Wife's Name and Age At Marriage.`);
-    }
 
     await fillFatherName(driver, "Ram Sharma");
     await fillMotherName(driver, "Sunita Sharma");
+
+    // Dynamic Fields
+    await fillSpouseNameIfExists(driver, "Priya Sharma");
+    await fillAgeAtMarriageIfExists(driver, "22");
+    await selectHaveChildrenIfExists(driver, "Yes"); // 🆕 Added step here
+
     await selectCommunity(driver, "General");
     await selectReligion(driver, "Hindu");
-
+    await selectStatusOfWomen(driver, "Eligible Couple");
     console.log("✅ Head of Family form filled successfully!");
     await submitFinalForm(driver);
 }

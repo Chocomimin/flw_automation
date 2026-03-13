@@ -99,14 +99,13 @@ async function selectResidentialArea(driver, value = "Rural") {
     const x = Math.floor(width / 2);
     let y;
 
-    // ⬇️ UPDATED COORDINATES BASED ON THE NEW DROPDOWN UI ⬇️
     switch (value) {
-        case "Rural": y = Math.floor(height * 0.63); break;
-        case "Urban": y = Math.floor(height * 0.67); break;
-        case "Tribal": y = Math.floor(height * 0.71); break;
-        case "Other": y = Math.floor(height * 0.75); break;       // Shifted up from 0.80
-        case "Tea Garden": y = Math.floor(height * 0.80); break;  // 0.80 now correctly maps here
-        default: y = Math.floor(height * 0.75);
+        case "Rural": y = Math.floor(height * 0.54); break;
+        case "Urban": y = Math.floor(height * 0.58); break;
+        case "Tribal": y = Math.floor(height * 0.62); break;
+        case "Other": y = Math.floor(height * 0.67); break;
+        case "Tea Garden": y = Math.floor(height * 0.71); break;
+        default: y = Math.floor(height * 0.67);
     }
 
     await driver.performActions([{
@@ -122,7 +121,7 @@ async function selectResidentialArea(driver, value = "Rural") {
     console.log(`✅ Selected Residential Area: ${value}`);
 }
 
-async function selectTypeOfHouse(driver, value = "None") {
+async function selectTypeOfHouse(driver, value = "None", isOtherResidentialAreaOpen = false) {
     await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Type of house"))');
     await driver.pause(1000);
 
@@ -143,12 +142,22 @@ async function selectTypeOfHouse(driver, value = "None") {
     const x = Math.floor(width / 2);
     let y;
 
-    switch (value) {
-        case "None": y = Math.floor(height * 0.45); break;
-        case "Kuccha": y = Math.floor(height * 0.50); break;
-        case "Pucca": y = Math.floor(height * 0.55); break;
-        case "Other": y = Math.floor(height * 0.60); break;
-        default: y = Math.floor(height * 0.72);
+    if (isOtherResidentialAreaOpen) {
+        switch (value) {
+            case "None": y = Math.floor(height * 0.75); break;
+            case "Kuchha": y = Math.floor(height * 0.79); break;
+            case "Pucca": y = Math.floor(height * 0.84); break;
+            case "Other": y = Math.floor(height * 0.88); break;
+            default: y = Math.floor(height * 0.75);
+        }
+    } else {
+        switch (value) {
+            case "None": y = Math.floor(height * 0.65); break;
+            case "Kuchha": y = Math.floor(height * 0.69); break;
+            case "Pucca": y = Math.floor(height * 0.74); break;
+            case "Other": y = Math.floor(height * 0.78); break;
+            default: y = Math.floor(height * 0.65);
+        }
     }
 
     await driver.performActions([{
@@ -161,18 +170,31 @@ async function selectTypeOfHouse(driver, value = "None") {
         ]
     }]);
     await driver.releaseActions();
-    console.log(`✅ Selected Type of House: ${value}`);
+    console.log(`✅ Selected Type of House: ${value} (Other Res Open: ${isOtherResidentialAreaOpen})`);
 }
 
 async function selectHouseOwnership(driver, value = "Yes") {
+    // Scroll to make sure House ownership is visible
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("House ownership"))');
+    await driver.pause(1000);
+
     const options = await driver.$$(`android=new UiSelector().text("${value}")`);
     await options[0].click();
     console.log(`✅ House Ownership selected: ${value}`);
 }
 
 async function selectSeparateKitchen(driver, value = "Yes") {
+    // Scroll down to the Kitchen section
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Kitchen"))');
+    await driver.pause(1000);
+
     const options = await driver.$$(`android=new UiSelector().text("${value}")`);
-    await options[1].click();
+
+    // If the House Ownership "Yes" scrolled off the top of the screen,
+    // the array will only have 1 item. This safely picks index 1 if it exists, or index 0 if it doesn't.
+    const targetIndex = options.length > 1 ? 1 : 0;
+    await options[targetIndex].click();
+
     console.log(`✅ Separate Kitchen selected: ${value}`);
 }
 
@@ -198,15 +220,15 @@ async function selectTypeOfFuel(driver, value = "Crop Residue") {
     let y;
 
     switch (value) {
-        case "Firewood": y = height * 0.25; break;
-        case "Crop Residue": y = height * 0.30; break;
-        case "Cow dung cake": y = height * 0.35; break;
-        case "Coal": y = height * 0.40; break;
-        case "Kerosene": y = height * 0.45; break;
-        case "LPG": y = height * 0.50; break;
-        case "Induction": y = height * 0.55; break;
-        case "Other": y = height * 0.60; break;
-        default: y = height * 0.80;
+        case "Firewood": y = height * 0.37; break;
+        case "Crop Residue": y = height * 0.42; break;
+        case "Cow dung cake": y = height * 0.46; break;
+        case "Coal": y = height * 0.50; break;
+        case "Kerosene": y = height * 0.55; break;
+        case "LPG": y = height * 0.59; break;
+        case "Induction": y = height * 0.63; break;
+        case "Other": y = height * 0.68; break;
+        default: y = height * 0.42;
     }
 
     await driver.performActions([{
@@ -244,15 +266,15 @@ async function selectPrimaryWaterSource(driver, value = "Tank") {
     let y;
 
     switch (value) {
-        case "Tap Water": y = height * 0.25; break;
-        case "Hand pump inside house": y = height * 0.31; break;
-        case "Hand pump outside of house": y = height * 0.37; break;
-        case "Well": y = height * 0.44; break;
-        case "Tank": y = height * 0.50; break;
-        case "River": y = height * 0.56; break;
-        case "Pond": y = height * 0.62; break;
-        case "Other": y = height * 0.69; break;
-        default: y = height * 0.50;
+        case "Tap Water": y = height * 0.43; break;
+        case "Hand pump inside house": y = height * 0.48; break;
+        case "Hand pump outside of house": y = height * 0.52; break;
+        case "Well": y = height * 0.57; break;
+        case "Tank": y = height * 0.61; break;
+        case "River": y = height * 0.66; break;
+        case "Pond": y = height * 0.70; break;
+        case "Other": y = height * 0.74; break;
+        default: y = height * 0.61;
     }
 
     await driver.performActions([{
@@ -290,12 +312,12 @@ async function selectElectricityAvailability(driver, value ="Electricity Supply"
     let y;
 
     switch (value) {
-        case "Electricity Supply": y = height * 0.545; break;
-        case "Generator":          y = height * 0.585; break;
-        case "Solar Power":        y = height * 0.625; break;
-        case "Kerosene Lamp":      y = height * 0.665; break;
-        case "Other":              y = height * 0.745; break;
-        default:                   y = height * 0.545;
+        case "Electricity Supply": y = height * 0.62; break;
+        case "Generator":          y = height * 0.67; break;
+        case "Solar Power":        y = height * 0.71; break;
+        case "Kerosene Lamp":      y = height * 0.75; break;
+        case "Other":              y = height * 0.80; break;
+        default:                   y = height * 0.62;
     }
 
     await driver.performActions([{
@@ -343,13 +365,13 @@ async function selectToiletAvailability(driver, value = "Flush toilet with runni
     let y;
 
     switch (value) {
-        case "Flush toilet with running water": y = height * 0.62; break;
-        case "Flush toilet without water": y = height * 0.67; break;
-        case "Pit toilet with running water supply": y = height * 0.72; break;
-        case "Pit toilet without water supply": y = height * 0.77; break;
+        case "Flush toilet with running water": y = height * 0.65; break;
+        case "Flush toilet without water": y = height * 0.69; break;
+        case "Pit toilet with running water supply": y = height * 0.74; break;
+        case "Pit toilet without water supply": y = height * 0.78; break;
         case "Other": y = height * 0.82; break;
         case "None": y = height * 0.87; break;
-        default: y = height * 0.90;
+        default: y = height * 0.65;
     }
 
     await driver.performActions([{
@@ -367,23 +389,29 @@ async function selectToiletAvailability(driver, value = "Flush toilet with runni
 
 // Master function to fill the first form and trigger the transition
 async function fillHouseholdFormWithExamples(driver) {
-    console.log("📝 Filling household form with example data...");
+    console.log("📝 Filling household form with NEW example data...");
 
-    await fillFirstName(driver, "arun");
-    await fillLastName(driver, "Sharma");
-    await fillMobileNumber(driver, "9876543210");
-    await fillHouseNo(driver, "42");
-    await fillWardNo(driver, "12");
-    await fillWardName(driver, "Green Park");
-    await fillMohallaName(driver, "New Colony");
+    await fillFirstName(driver, "Kavita");
+    await fillLastName(driver, "Verma");
+    await fillMobileNumber(driver, "9123456789");
+    await fillHouseNo(driver, "108");
+    await fillWardNo(driver, "5");
+    await fillWardName(driver, "Sunrise Valley");
+    await fillMohallaName(driver, "Old Bazar");
 
-    await selectEconomicStatus(driver, "APL");
-    await selectResidentialArea(driver, "Rural");
-    await selectTypeOfHouse(driver, "None");
-    await selectHouseOwnership(driver, "Yes");
-    await selectSeparateKitchen(driver,"Yes");
-    await selectTypeOfFuel(driver, "Crop Residue");
-    await selectPrimaryWaterSource(driver, "Tank");
+    await selectEconomicStatus(driver, "BPL");
+
+    const residentialArea = "Urban"; // Switched to Urban
+    await selectResidentialArea(driver, residentialArea);
+
+    // Pass a flag depending on whether "Other" was selected for Residential Area
+    const isOtherResidentialOpen = (residentialArea === "Other");
+    await selectTypeOfHouse(driver, "Pucca", isOtherResidentialOpen); // Switched to Pucca
+
+    await selectHouseOwnership(driver, "No"); // Switched to No
+    await selectSeparateKitchen(driver, "No"); // Switched to No
+    await selectTypeOfFuel(driver, "LPG"); // Switched to LPG
+    await selectPrimaryWaterSource(driver, "Tap Water"); // Switched to Tap Water
     await selectElectricityAvailability(driver, "Electricity Supply");
     await selectToiletAvailability(driver, "Flush toilet with running water");
 
@@ -396,7 +424,7 @@ async function fillHouseholdFormWithExamples(driver) {
 
     // 1. Click the Submit button on the Household Form
     console.log("🔍 Clicking Submit button...");
-    const submitBtnFirstPage = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/btn_submit")');
+    const submitBtnFirstPage = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_submit")');
     await submitBtnFirstPage.waitForDisplayed({ timeout: 10000 });
     await submitBtnFirstPage.click();
 

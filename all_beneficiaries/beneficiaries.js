@@ -5,7 +5,7 @@ const capabilities = {
     platformName: 'Android',
     'appium:automationName': 'UiAutomator2',
     'appium:deviceName': 'emulator-5554', // Change to your actual device name or ID
-    'appium:appPackage': 'org.piramalswasthya.sakhi.mitanin.uat',
+    'appium:appPackage': 'org.piramalswasthya.sakhi.saksham.uat', // ✅ Updated Package ID
     'appium:appActivity': '.ui.login.LoginActivity',
     'appium:noReset': true // Keeps you logged in between test runs
 };
@@ -35,7 +35,7 @@ async function searchAndClickAbha(driver, nameToSearch) {
     console.log(`🔍 Searching for: ${nameToSearch}`);
 
     // Find and click the Search Box
-    const searchBox = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/searchView")');
+    const searchBox = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/searchView")'); // ✅ Updated ID
     await searchBox.waitForDisplayed({ timeout: 5000 });
     await searchBox.click();
 
@@ -54,7 +54,7 @@ async function searchAndClickAbha(driver, nameToSearch) {
     console.log(`👆 Clicking ABHA button for ${exactNameInApp}...`);
 
     // Find the specific person's card, then find the ABHA button inside it
-    const abhaButtonXPath = `//android.widget.TextView[@text="${exactNameInApp}"]/ancestor::android.view.ViewGroup[@resource-id="org.piramalswasthya.sakhi.mitanin.uat:id/contentLayout"]//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.mitanin.uat:id/btn_abha"]`;
+    const abhaButtonXPath = `//android.widget.TextView[@text="${exactNameInApp}"]/ancestor::android.view.ViewGroup[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/contentLayout"]//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_abha"]`; // ✅ Updated IDs
 
     const abhaButton = await driver.$(abhaButtonXPath);
     await abhaButton.waitForDisplayed({ timeout: 5000 });
@@ -67,7 +67,7 @@ async function createAbha(driver, aadhaarNumber, mobileNumber) {
     console.log("📝 Starting ABHA Creation process...");
 
     // 1. Ensure we are on the "Create ABHA" tab
-    const createToggle = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/createToggle")');
+    const createToggle = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/createToggle")'); // ✅ Updated ID
     await createToggle.waitForDisplayed({ timeout: 5000 });
     await createToggle.click();
     console.log("✅ Selected 'Create ABHA' tab");
@@ -87,7 +87,7 @@ async function createAbha(driver, aadhaarNumber, mobileNumber) {
         const part3 = cleanAadhaar.substring(8, 12);
 
         // Find all EditTexts inside the Aadhaar input container
-        const aadhaarInputs = await driver.$$('//android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.mitanin.uat:id/tiet_aadhaar_number"]//android.widget.EditText');
+        const aadhaarInputs = await driver.$$('//android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/tiet_aadhaar_number"]//android.widget.EditText'); // ✅ Updated ID
 
         if (aadhaarInputs.length === 3) {
             await aadhaarInputs[0].setValue(part1);
@@ -107,7 +107,7 @@ async function createAbha(driver, aadhaarNumber, mobileNumber) {
 
     // 3. Fill the Mobile Number
     console.log(`📱 Entering Mobile Number: ${mobileNumber}`);
-    const mobileInput = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/tiet_mobile_number")');
+    const mobileInput = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/tiet_mobile_number")'); // ✅ Updated ID
     await mobileInput.setValue(mobileNumber);
 
     if (await driver.isKeyboardShown()) {
@@ -120,7 +120,7 @@ async function createAbha(driver, aadhaarNumber, mobileNumber) {
     // 4. Click the Consent View/Checkbox
     console.log("👆 Accepting Consent...");
     // The developer made a specific view clickable for the consent instead of just the checkbox
-    const consentClickView = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/clickview")');
+    const consentClickView = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/clickview")'); // ✅ Updated ID
     await consentClickView.click();
     console.log("✅ Consent accepted");
 
@@ -128,7 +128,7 @@ async function createAbha(driver, aadhaarNumber, mobileNumber) {
 
     // 5. Click "Send OTP"
     console.log("👆 Clicking 'Send OTP'...");
-    const sendOtpBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/btn_verify_aadhaar")');
+    const sendOtpBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_verify_aadhaar")'); // ✅ Updated ID
 
     // Wait for the button to become enabled (it usually enables after consent is checked and valid data is entered)
     await driver.waitUntil(
@@ -148,7 +148,7 @@ async function markAllAndAgree(driver) {
 
     // Wait for consent screen
     const title = await driver.$(
-        'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/tvTitleDeclaration")'
+        'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/tvTitleDeclaration")' // ✅ Updated ID
     );
     await title.waitForDisplayed({ timeout: 10000 });
 
@@ -156,7 +156,7 @@ async function markAllAndAgree(driver) {
 
     // Click the FIRST checkbox inside RecyclerView
     const firstCheckbox = await driver.$(
-        '(//androidx.recyclerview.widget.RecyclerView//*[@resource-id="org.piramalswasthya.sakhi.mitanin.uat:id/checkBox"])[1]'
+        '(//androidx.recyclerview.widget.RecyclerView//*[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/checkBox"])[1]' // ✅ Updated ID
     );
 
     await firstCheckbox.waitForDisplayed({ timeout: 5000 });
@@ -174,7 +174,7 @@ async function markAllAndAgree(driver) {
 
     // Click I Agree
     const agreeBtn = await driver.$(
-        'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/btn_accept")'
+        'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_accept")' // ✅ Updated ID
     );
 
     await agreeBtn.waitForDisplayed({ timeout: 5000 });
@@ -182,6 +182,7 @@ async function markAllAndAgree(driver) {
 
     console.log("🎉 Clicked I Agree successfully!");
 }
+
 // 4. Main Execution Block
 async function main() {
     console.log("🚀 Starting Appium session...");
