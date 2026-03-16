@@ -1,30 +1,30 @@
-// --- Constants & Data ---
+
 const FORM_DATA = {
-    // Delivery Date
+    
     deliveryDate: { day: 10, month: 3, year: 2026 },
 
-    // Delivery Time (Format: hour 1-12, minute 0-59, ampm "AM" or "PM")
+    
     deliveryTime: { hour: "10", minute: "30", ampm: "AM" },
 
-    // Place of Delivery Selection
+    
     placeOfDelivery: 'Primary Health Centre',
-    // Add inside FORM_DATA
-    typeOfDelivery: 'Normal', // <-- Replace 'Normal' with the actual text of the option you want to click
-    // Add inside FORM_DATA
-    complicationsDuringDelivery: 'Yes', // <-- Set to 'Yes' or 'No'
+    
+    typeOfDelivery: 'Normal', 
+    
+    complicationsDuringDelivery: 'Yes', 
     deliveryComplication: 'RETAINED PLACENTA',
-    // Add inside FORM_DATA
-    totalBirths: "1", // <-- Replace with the number of babies born
-    // Add inside FORM_DATA
-    liveBirths: "1", // <-- Replace with the number of live babies born
-    // Add inside FORM_DATA
-    stillbirths: "0", // <-- Replace with the actual number of stillbirths
-    // Add inside FORM_DATA
-    dischargeDate: { day: 12, month: 3, year: 2026 }, // <-- Adjust as needed
-    // Add inside FORM_DATA
-    dischargeTime: { hour: "11", minute: "45", ampm: "AM" }, // <-- Adjust as needed
-    // Add inside FORM_DATA
-    jsyBeneficiary: 'Yes', // <-- Set to 'Yes' or 'No'
+    
+    totalBirths: "1", 
+    
+    liveBirths: "1", 
+    
+    stillbirths: "0", 
+    
+    dischargeDate: { day: 12, month: 3, year: 2026 }, 
+    
+    dischargeTime: { hour: "11", minute: "45", ampm: "AM" }, 
+    
+    jsyBeneficiary: 'Yes', 
 };
 
 const MONTH_NAMES = [
@@ -33,7 +33,7 @@ const MONTH_NAMES = [
     'October', 'November', 'December'
 ];
 
-// ── W3C Actions Helpers ─────────────────────────────────────────
+
 async function tapAt(driver, x, y) {
     await driver.performActions([{
         type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
@@ -73,9 +73,9 @@ async function scrollDownToText(driver, text, maxScrolls = 3) {
         try {
             const element = await driver.$(elementXPath);
             if ((await element.isExisting()) && (await element.isDisplayed())) {
-                return; // Element found, stop scrolling
+                return; 
             }
-        } catch (e) { } // Keep scrolling
+        } catch (e) { } 
 
         const size = await driver.getWindowRect();
         const startX = Math.floor(size.width / 2);
@@ -107,7 +107,7 @@ async function isEmpty(field, hintText) {
 // ── Calendar & Time Helpers ───────────────────────────────────────────────────
 async function getCalendarMonthYear(driver) {
     try {
-        const dayElement = await driver.$('//android.view.View[string-length(@text) > 0]');
+        const dayElement = await driver.$('android=new UiSelector().text("15")');
         const contentDesc = await dayElement.getAttribute('content-desc');
         if (contentDesc) {
             const parts = contentDesc.split(' ');
@@ -233,7 +233,7 @@ async function pickTimeFromClock(driver, timeObj) {
     await okBtn.click();
 }
 
-// ── Delivery Outcome Form Filling Functions ───────────────────────────────────
+
 
 async function fillDeliveryDate(driver) {
     console.log('Processing Date of Delivery...');
@@ -289,7 +289,7 @@ async function fillTimeOfDelivery(driver) {
 async function fillPlaceOfDelivery(driver) {
     console.log('Processing Place of Delivery Dropdown...');
 
-    // Ensure we scroll to the dropdown so it's in view
+    
     await scrollDownToText(driver, "Place of Delivery", 2);
 
     const spinner = await driver.$('//android.widget.Spinner[@text="Place of Delivery" or @hint="Place of Delivery"]');
@@ -305,7 +305,7 @@ async function fillPlaceOfDelivery(driver) {
 
             if (await dropdownArrow.isExisting()) {
                 await dropdownArrow.click();
-                await driver.pause(1500); // Wait for the dropdown to animate open
+                await driver.pause(1500); 
 
                 if (await driver.isKeyboardShown()) {
                     await driver.hideKeyboard();
@@ -314,8 +314,8 @@ async function fillPlaceOfDelivery(driver) {
                     await driver.pause(1500);
                 }
 
-                // --- THE BETTER WAY: Click by exact text ---
-                // This is 100% reliable across all screen sizes
+                
+                
                 const targetOption = await driver.$(`//*[@text="${FORM_DATA.placeOfDelivery}"]`);
 
                 if (await targetOption.isExisting()) {
@@ -325,15 +325,15 @@ async function fillPlaceOfDelivery(driver) {
                 } else {
                     console.log(`⚠ Could not find text natively, falling back to coordinates...`);
 
-                    // --- THE RECALCULATED COORDINATES ---
-                    // Gap adjusted to ~108px based on screenshot proportions
-                    // --- THE RECALCULATED COORDINATES (54px gap) ---
-// Anchored at Community Health Centre = 1020
+                    
+                    
+                    
+
                     const PLACE_OF_DELIVERY_COORDS = {
                         'District Hospital':           { x: 500, y: 966 },
-                        'Community Health Centre':     { x: 500, y: 1020 }, // Confirmed baseline
-                        'Primary Health Centre':       { x: 500, y: 1074 }, // <-- The perfect spot
-                        'Sub Centre':                  { x: 500, y: 1128 }, // What you just hit
+                        'Community Health Centre':     { x: 500, y: 1020 }, 
+                        'Primary Health Centre':       { x: 500, y: 1074 }, 
+                        'Sub Centre':                  { x: 500, y: 1128 }, 
                         'Other Public Facility':       { x: 500, y: 1182 },
                         'Accredited Private Hospital': { x: 500, y: 1236 },
                         'Other Private Hospital':      { x: 500, y: 1290 },
@@ -377,24 +377,24 @@ async function clickSubmitButton(driver) {
 async function fillTypeOfDelivery(driver) {
     console.log('Processing Type of Delivery...');
 
-    // Scroll to ensure the field is visible
+    
     await scrollDownToText(driver, "Type of Delivery *", 2);
 
-    // Locate the field using the exact XML attributes you provided
+    
     const typeField = await driver.$('//android.widget.TextView[@text="Type of Delivery *" and @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/tv_nullable"]');
 
     if (await typeField.isExisting()) {
         console.log("⏳ Opening 'Type of Delivery' Dropdown...");
         await typeField.click();
-        await driver.pause(1500); // Wait for the dropdown/dialog to animate open
+        await driver.pause(1500); 
 
-        // Hide keyboard just in case it pops up
+        
         if (await driver.isKeyboardShown()) {
             await driver.hideKeyboard();
             await driver.pause(1000);
         }
 
-        // Click the exact text defined in FORM_DATA
+        
         const targetOption = await driver.$(`//*[@text="${FORM_DATA.typeOfDelivery}"]`);
 
         if (await targetOption.isExisting()) {
@@ -412,12 +412,12 @@ async function fillTypeOfDelivery(driver) {
 async function fillComplicationsDuringDelivery(driver) {
     console.log('Processing Complications during Delivery...');
 
-    // Scroll to ensure the question is visible
+    
     await scrollDownToText(driver, "Complications during Delivery?", 2);
 
     const optionText = FORM_DATA.complicationsDuringDelivery;
 
-    // THE FIX: We go up to the parent container (/parent::*) first, THEN look for the sibling RadioGroup
+    
     const radioBtnXPath = `//android.widget.TextView[@text="Complications during Delivery?"]/parent::*/following-sibling::android.widget.RadioGroup//android.widget.RadioButton[@text="${optionText}"]`;
 
     const radioBtn = await driver.$(radioBtnXPath);
@@ -425,7 +425,7 @@ async function fillComplicationsDuringDelivery(driver) {
     if (await radioBtn.isExisting()) {
         const isChecked = await radioBtn.getAttribute('checked');
 
-        // Sometimes getAttribute('checked') returns 'true' (string), sometimes true (boolean)
+        
         if (isChecked !== 'true' && isChecked !== true) {
             console.log(`⏳ Tapping '${optionText}' for Complications during Delivery...`);
             await radioBtn.click();
@@ -439,7 +439,7 @@ async function fillComplicationsDuringDelivery(driver) {
 }
 
 async function fillDeliveryComplication(driver) {
-    // Only proceed if complications are marked as "Yes" in your data
+    
     if (FORM_DATA.complicationsDuringDelivery !== 'Yes') {
         console.log('➡ Complications marked as "No" or not set. Skipping Delivery Complication dropdown.');
         return;
@@ -447,17 +447,17 @@ async function fillDeliveryComplication(driver) {
 
     console.log('Checking for Delivery Complication Dropdown...');
 
-    // Scroll to ensure the dropdown is visible
+    
     await scrollDownToText(driver, "Delivery Complication", 2);
 
-    // 1. Check if the dropdown box actually exists on the screen
+    
     const dropdownBox = await driver.$('//*[contains(@text, "Delivery Complication") or contains(@hint, "Delivery Complication")]');
 
-    // 2. If it exists AND is displayed, proceed with the clicks
+    
     if ((await dropdownBox.isExisting()) && (await dropdownBox.isDisplayed())) {
         console.log("⏳ 'Delivery Complication' is visible. Opening dropdown...");
 
-        // Find the arrow or click the box directly
+        
         const arrowXPath = `//*[contains(@text, "Delivery Complication")]/following-sibling::*//android.widget.ImageButton`;
         const dropdownArrow = await driver.$(arrowXPath);
 
@@ -467,9 +467,9 @@ async function fillDeliveryComplication(driver) {
             await dropdownBox.click();
         }
 
-        await driver.pause(1500); // Wait for dropdown animation
+        await driver.pause(1500); 
 
-        // Hide keyboard if it pops up
+        
         if (await driver.isKeyboardShown()) {
             await driver.hideKeyboard();
             await driver.pause(1000);
@@ -477,21 +477,21 @@ async function fillDeliveryComplication(driver) {
             await driver.pause(1500);
         }
 
-        // --- THE DYNAMIC RELATIVE COORDINATE METHOD ---
-        // Get the exact position of the dropdown box on the screen right now
+        
+        
         const location = await dropdownBox.getLocation();
         const size = await dropdownBox.getSize();
 
-        // Calculate the bottom edge of the box
+        
         const boxBottomY = location.y + size.height;
 
-        // Define the item height based on your screen proportions
+        
         const itemHeight = 112;
 
-        // Tap perfectly in the horizontal center of the box
+        
         const fixedX = Math.floor(location.x + (size.width / 2));
 
-        // Calculate exact Y dynamically (0.5 hits the center of the 1st item, 1.5 the 2nd, etc.)
+        
         const COMPLICATION_COORDS = {
             'PPH':                   { x: fixedX, y: boxBottomY + (itemHeight * 0.5) },
             'RETAINED PLACENTA':     { x: fixedX, y: boxBottomY + (itemHeight * 1.5) },
@@ -515,24 +515,24 @@ async function fillDeliveryComplication(driver) {
         }
 
     } else {
-        // 3. If the dropdown isn't there, skip it gracefully
+        
         console.log('➡ "Delivery Complication" dropdown is not visible on screen. Skipping.');
     }
 }
 
-// ── Android Keycode Helper for Numeric Fields ──
+
 async function enterNumericText(driver, element, value) {
     await element.click();
-    await driver.pause(1000); // Wait for the keyboard to fully open
+    await driver.pause(1000); 
 
-    // Send the Backspace key (keycode 67) twice to clear any default "0"
+    
     await driver.execute('mobile: pressKey', { keycode: 67 });
     await driver.execute('mobile: pressKey', { keycode: 67 });
 
-    // Map the string digits to physical Android OS keycodes
+    
     const KEYCODES = { '0': 7, '1': 8, '2': 9, '3': 10, '4': 11, '5': 12, '6': 13, '7': 14, '8': 15, '9': 16 };
 
-    // Type out the number
+    
     for (const char of value) {
         if (KEYCODES[char]) {
             await driver.execute('mobile: pressKey', { keycode: KEYCODES[char] });
@@ -540,11 +540,11 @@ async function enterNumericText(driver, element, value) {
         }
     }
 
-    // Aggressively hide the keyboard so it doesn't block the next fields
+    
     try {
         await driver.hideKeyboard();
     } catch (e) {
-        // Fallback: Press the Android physical Back Button (keycode 4) to dismiss keyboard
+        
         await driver.execute('mobile: pressKey', { keycode: 4 });
     }
     await driver.pause(1000);
@@ -614,7 +614,7 @@ async function fillStillbirths(driver) {
 async function fillDischargeDate(driver) {
     console.log('Processing Date of Discharge...');
 
-    // Scroll to ensure the field is visible
+    
     await scrollDownToText(driver, "Date of Discharge", 2);
 
     const field = await driver.$('//android.widget.EditText[contains(@hint, "Date of Discharge") or contains(@text, "Date of Discharge")]');
@@ -624,13 +624,13 @@ async function fillDischargeDate(driver) {
         const currentText = await field.getText();
         const targetDateString = `${String(FORM_DATA.dischargeDate.day).padStart(2, '0')}-${String(FORM_DATA.dischargeDate.month).padStart(2, '0')}-${FORM_DATA.dischargeDate.year}`;
 
-        // Check if it's already filled correctly
+        
         if (await isEmpty(field, 'Date of Discharge') || currentText !== targetDateString) {
             console.log(`⏳ Clicking Date of Discharge field to open calendar...`);
             await field.click();
             await driver.pause(2000);
 
-            // Call your existing calendar helper function
+            
             await pickDateFromCalendar(driver, FORM_DATA.dischargeDate);
             console.log('✔ Date of Discharge filled successfully.');
         } else {
@@ -644,7 +644,7 @@ async function fillDischargeDate(driver) {
 async function fillTimeOfDischarge(driver) {
     console.log('Processing Time of Discharge...');
 
-    // Scroll to ensure the field is visible
+    
     await scrollDownToText(driver, "Time of Discharge", 2);
 
     const field = await driver.$('//android.widget.EditText[contains(@hint, "Time of Discharge") or contains(@text, "Time of Discharge")]');
@@ -653,13 +653,13 @@ async function fillTimeOfDischarge(driver) {
     if (await field.isExisting() && await field.isDisplayed()) {
         const currentText = await field.getText();
 
-        // Check if it's empty or still showing the default placeholder text
+        
         if (await isEmpty(field, 'Time of Discharge') || currentText.includes('Time')) {
             console.log(`⏳ Clicking Time of Discharge field to open clock...`);
             await field.click();
             await driver.pause(2000);
 
-            // Call your existing clock helper function
+            
             await pickTimeFromClock(driver, FORM_DATA.dischargeTime);
             console.log('✔ Time of Discharge filled successfully.');
         } else {
@@ -672,12 +672,12 @@ async function fillTimeOfDischarge(driver) {
 async function fillJSYBeneficiary(driver) {
     console.log('Processing JSY Beneficiary...');
 
-    // Scroll to ensure the question is visible
+    
     await scrollDownToText(driver, "Is the Pregnant Woman a JSY Beneficiary?", 2);
 
     const optionText = FORM_DATA.jsyBeneficiary;
 
-    // XPath: Find the text, step up to the parent box, then find the RadioGroup next to it
+    
     const radioBtnXPath = `//android.widget.TextView[@text="Is the Pregnant Woman a JSY Beneficiary?"]/parent::*/following-sibling::android.widget.RadioGroup//android.widget.RadioButton[@text="${optionText}"]`;
 
     const radioBtn = await driver.$(radioBtnXPath);
@@ -697,36 +697,32 @@ async function fillJSYBeneficiary(driver) {
     }
 }
 
-// --- Add these functions to your existing file ---
 
-/**
- * Handles the logic for clicking 'add file', choosing gallery, and waiting.
- * @param {object} driver - The Appium driver instance
- * @param {string} cardTitle - "MCP Card 1" or "MCP Card 2"
- */
+
+
 async function uploadMCPCard(driver, cardTitle) {
     console.log(`Processing upload for ${cardTitle}...`);
 
-    // 1. Scroll to the specific card section
+    
     await scrollDownToText(driver, cardTitle, 2);
 
-    // 2. Locate the 'add file' icon specifically for this card title
-    // Logic: Find the TextView with the card title, go to its parent ViewGroup, then find the ImageView child
+    
+    
     const addFileIconXPath = `//android.widget.TextView[@text="${cardTitle}"]/parent::*//android.widget.ImageView[@content-desc="add file"]`;
     const addFileBtn = await driver.$(addFileIconXPath);
 
     if (await addFileBtn.isExisting()) {
         console.log(`⏳ Clicking 'add file' for ${cardTitle}...`);
         await addFileBtn.click();
-        await driver.pause(1500); // Wait for the "Choose an Option" dialog
+        await driver.pause(1500); 
 
-        // 3. Click 'Pick from Gallery' on the popup
+        
         const galleryBtn = await driver.$('//android.widget.Button[@text="Pick from Gallery"]');
         if (await galleryBtn.isExisting()) {
             await galleryBtn.click();
             console.log(`✔ Clicked 'Pick from Gallery'. Waiting 20 seconds for user selection...`);
 
-            // 4. Wait 20 seconds as requested
+            
             await driver.pause(20000);
         } else {
             console.error(`❌ Could not find 'Pick from Gallery' button on dialog.`);
@@ -736,9 +732,7 @@ async function uploadMCPCard(driver, cardTitle) {
     }
 }
 
-/**
- * Main function to handle both card uploads
- */
+
 async function uploadMCPCards(driver) {
     await uploadMCPCard(driver, "MCP Card 1");
     await driver.pause(1000);
@@ -747,38 +741,38 @@ async function uploadMCPCards(driver) {
 async function fillDeliveryOutcomeForm(driver) {
     console.log("--- Starting Delivery Outcome Form Entry ---");
 
-    // 1. Fill the Delivery Date
+    
     await fillDeliveryDate(driver);
     await driver.pause(1000);
 
-    // 2. Fill the Delivery Time
+    
     await fillTimeOfDelivery(driver);
     await driver.pause(1000);
 
-    // 3. Fill Place of Delivery (Dropdown via Coordinates)
+    
     await fillPlaceOfDelivery(driver);
     await driver.pause(1000);
-    // 4. Fill Type of Delivery
+    
     await fillTypeOfDelivery(driver);
     await driver.pause(1000);
     await fillComplicationsDuringDelivery(driver);
     await driver.pause(1000);
     await fillDeliveryComplication(driver);
     await driver.pause(1000);
-    // 7. Fill Total Births
+    
     await fillTotalBirths(driver);
     await driver.pause(1000);
 
-    // 8. Fill Number of Live Births
+    
     await fillLiveBirths(driver);
     await driver.pause(1000);
-    // 9. Fill Number of Stillbirths
+    
     await fillStillbirths(driver);
     await driver.pause(1000);
-    // 10. Fill Date of Discharge
+    
     await fillDischargeDate(driver);
     await driver.pause(1000);
-    // 11. Fill Time of Discharge
+    
     await fillTimeOfDischarge(driver);
     await driver.pause(1000);
     await fillJSYBeneficiary(driver);
@@ -786,9 +780,9 @@ async function fillDeliveryOutcomeForm(driver) {
     await uploadMCPCards(driver);
     await driver.pause(1000);
 
-    // --- Final: Click Submit ---
+    
     await clickSubmitButton(driver);
-    // (More fields will go here, like Type of Delivery)
+    
 
     console.log("✅ Delivery Outcome Form entry complete.");
 }

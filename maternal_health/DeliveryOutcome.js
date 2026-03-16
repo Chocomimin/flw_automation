@@ -1,6 +1,6 @@
 const { remote } = require('webdriverio');
 
-// FIXED: Ensure the imported name exactly matches the exported name from the other file
+
 const { fillDeliveryOutcomeForm } = require("./deliveryRegistration");
 
 const capabilities = {
@@ -20,9 +20,7 @@ const wdOpts = {
     capabilities,
 };
 
-/**
- * Clicks on the "Delivery Outcome" option in the grid view.
- */
+
 async function clickDeliveryOutcome(driver) {
     try {
         console.log("⏳ Looking for 'Delivery Outcome' icon...");
@@ -36,14 +34,12 @@ async function clickDeliveryOutcome(driver) {
     }
 }
 
-/**
- * Scrolls down the list until it finds the target name, then clicks their specific Register button.
- */
+
 async function scrollAndRegister(driver, targetName) {
     try {
         console.log(`⏳ Scrolling through the list to find '${targetName}'...`);
 
-        // Tell Android's UIAutomator to scroll down automatically
+        
         const androidScrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("${targetName}")`;
         const nameElement = await driver.$(`android=${androidScrollSelector}`);
         await nameElement.waitForDisplayed({ timeout: 15000 });
@@ -71,17 +67,17 @@ async function runTest() {
         driver = await remote(wdOpts);
         console.log("🚀 Starting Test Flow...");
 
-        // 1. Click Delivery Outcome from the Home Screen
+        
         await clickDeliveryOutcome(driver);
         await driver.pause(3000);
 
-        // 2. Scroll through the list to find Kulsuma Begum and click register
+        
         await scrollAndRegister(driver, "KULSUMA BEGUM");
 
-        // Wait 3 seconds for the form to fully render on the screen
+        
         await driver.pause(3000);
 
-        // 3. Call the imported form function
+        
         await fillDeliveryOutcomeForm(driver);
 
         console.log("🎉 Test Flow Completed Successfully!");

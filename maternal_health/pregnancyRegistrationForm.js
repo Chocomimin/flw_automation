@@ -1,7 +1,7 @@
 const FORM_DATA = {
-  dateOfRegistration: { day: 6, month: 3, year: 2026 },   // 06 March 2026
+  dateOfRegistration: { day: 6, month: 3, year: 2026 },   
   rchId: '123456789967',
-  lmpDate: { day: 1, month: 1, year: 2026 },              // 01 January 2026
+  lmpDate: { day: 1, month: 1, year: 2026 },              
   bloodGroup: 'B +Ve',
   weight: '55',
   height: '160',
@@ -16,7 +16,7 @@ const FORM_DATA = {
   homeDeliveryPreviousPregnancy: 'No',
   badObstetricHistory: 'No',
   multiplePregnancy: 'No',
-  hrpIdentifier: 'ANM' // <-- Added for conditional HRP dropdown
+  hrpIdentifier: 'ANM' 
 };
 
 const BLOOD_GROUP_COORDS = {
@@ -36,13 +36,13 @@ const MONTH_NAMES = [
   'October', 'November', 'December'
 ];
 
-// Calendar dialog button coordinates extracted directly from your XML bounds
+
 const CALENDAR = {
-  prevMonthBtn:  { x: 274, y: 924 },   // android:id/prev bounds [214,864][334,984]
-  nextMonthBtn:  { x: 806, y: 924 },   // Estimated symmetrical position for next button
-  okBtn:         { x: 790, y: 1754 },  // android:id/button1 bounds [710,1694][870,1814]
-  cancelBtn:     { x: 610, y: 1754 },  // android:id/button2 bounds [530,1694][690,1814]
-  yearHeader:    { x: 280, y: 670 },   // android:id/date_picker_header_year bounds [220,629][340,711]
+  prevMonthBtn:  { x: 274, y: 924 },   
+  nextMonthBtn:  { x: 806, y: 924 },   
+  okBtn:         { x: 790, y: 1754 },  
+  cancelBtn:     { x: 610, y: 1754 },  
+  yearHeader:    { x: 280, y: 670 },   
 };
 
 const COMPLICATION_COORDS = {
@@ -68,7 +68,7 @@ const HRP_COORDS = {
   'Specialist at Higher Facility': { x: 540, y: 1940 }
 };
 
-// ── W3C Actions Tap (Fixes GET/Body error) ────────────────────────────────────
+
 async function tapAt(driver, x, y) {
   await driver.performActions([
     {
@@ -86,7 +86,7 @@ async function tapAt(driver, x, y) {
   await driver.releaseActions();
 }
 
-// ── Get current month/year shown in the calendar view ─────────────────────────
+
 async function getCalendarMonthYear(driver) {
   try {
     const dayElement = await driver.$('android=new UiSelector().text("15")');
@@ -108,7 +108,7 @@ async function getCalendarMonthYear(driver) {
   }
 }
 
-// ── Navigate calendar to target month/year ────────────────────────────────────
+
 async function navigateToMonth(driver, targetMonth, targetYear) {
   const yearHeader = await driver.$('android=new UiSelector().resourceId("android:id/date_picker_header_year")');
   const currentYear = parseInt(await yearHeader.getText());
@@ -135,7 +135,7 @@ async function navigateToMonth(driver, targetMonth, targetYear) {
   }
 }
 
-// ── Pick date from calendar dialog ───────────────────────────────────────────
+
 async function pickDateFromCalendar(driver, dateObj) {
   const { day, month, year } = dateObj;
 
@@ -157,13 +157,13 @@ async function pickDateFromCalendar(driver, dateObj) {
   await driver.pause(500);
 }
 
-// ── Helper: Get EditText fields by index ──────────────────────────────────────
+
 async function getFieldByIndex(driver, index) {
   const fields = await driver.$$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/et")');
   return fields[index];
 }
 
-// ── Helper: Check if field is empty ───────────────────────────────────────────
+
 async function isEmpty(field, hintText) {
   try {
     const text = await field.getText();
@@ -211,7 +211,7 @@ async function scrollDownToText(driver, text, maxScrolls = 5) {
   console.log(`⚠️ Reached max scrolls without finding: "${text}"`);
 }
 
-// ── Form Field Functions ──────────────────────────────────────────────────────
+
 async function fillDateOfRegistration(driver) {
   const field = await getFieldByIndex(driver, 0);
   if (await isEmpty(field, 'Date of Registration *')) {
@@ -500,21 +500,21 @@ async function fillMoreThanThreeDeliveries(driver, answer) {
   const questionText = "No. of Deliveries is more than 3";
   console.log(`Processing "${questionText}"... Target: ${answer}`);
 
-  // 1. Scroll into view
+  
   const scrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text("${questionText}"))`;
   await driver.$(`android=${scrollSelector}`);
   await driver.pause(500);
 
-  // 2. Exact XPath based on XML: Find the Text, go up to its parent Layout, then find the sibling RadioGroup, then the answer button
+  
   const radioBtnXpath = `//android.widget.TextView[@text="${questionText}"]/../following-sibling::android.widget.RadioGroup//android.widget.RadioButton[@text="${answer}"]`;
   const radioBtn = await driver.$(radioBtnXpath);
 
   await radioBtn.waitForDisplayed({ timeout: 5000 });
 
-  // 3. Check the current state
+  
   const isChecked = await radioBtn.getAttribute('checked');
 
-  // 4. Click if it's not already set to the desired answer
+  
   if (isChecked === 'true') {
     console.log(`⏭ "${questionText}" is already set to ${answer}.`);
   } else {
@@ -527,21 +527,21 @@ async function fillTimeFromLastDelivery(driver, answer) {
   const questionText = "Time from last delivery is less than 18 months";
   console.log(`Processing "${questionText}"... Target: ${answer}`);
 
-  // 1. Scroll into view
+  
   const scrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text("${questionText}"))`;
   await driver.$(`android=${scrollSelector}`);
   await driver.pause(500);
 
-  // 2. Exact XPath based on XML: Find the Text, go up to its parent Layout, then find the sibling RadioGroup, then the answer button
+  
   const radioBtnXpath = `//android.widget.TextView[@text="${questionText}"]/../following-sibling::android.widget.RadioGroup//android.widget.RadioButton[@text="${answer}"]`;
   const radioBtn = await driver.$(radioBtnXpath);
 
   await radioBtn.waitForDisplayed({ timeout: 5000 });
 
-  // 3. Check the current state
+  
   const isChecked = await radioBtn.getAttribute('checked');
 
-  // 4. Click if it's not already set to the desired answer
+  
   if (isChecked === 'true') {
     console.log(`⏭ "${questionText}" is already set to ${answer}.`);
   } else {
@@ -555,39 +555,39 @@ async function fillHeightShortness(driver, answer) {
   console.log(`Processing "${questionText}"... Target: ${answer}`);
 
   try {
-    // 1. Scroll into view
+    
     const scrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text("${questionText}"))`;
     await driver.$(`android=${scrollSelector}`);
     await driver.pause(500);
 
-    // 2. Exact XPath based on XML: Find the Text, go up to its parent Layout, then find the sibling RadioGroup, then the answer button
+    
     const radioBtnXpath = `//android.widget.TextView[@text="${questionText}"]/../following-sibling::android.widget.RadioGroup//android.widget.RadioButton[@text="${answer}"]`;
     const radioBtn = await driver.$(radioBtnXpath);
 
     await radioBtn.waitForDisplayed({ timeout: 5000 });
 
-    // 3. Check the current state
+    
     const isChecked = await radioBtn.getAttribute('checked');
     if (isChecked === 'true') {
       console.log(`⏭ "${questionText}" is already set to ${answer}.`);
-      return; // Exit the function early if already filled
+      return; 
     }
 
-    // 4. Check if the element is clickable or enabled
+    
     const isClickable = await radioBtn.getAttribute('clickable');
     const isEnabled = await radioBtn.getAttribute('enabled');
 
     if (isClickable === 'false' || isEnabled === 'false') {
       console.log(`⏭ "${questionText}" is not clickable or is disabled. Moving to next column...`);
-      return; // Exit the function early to skip
+      return; 
     }
 
-    // 5. Click the button
+    
     await radioBtn.click();
     console.log(`✔ "${questionText}" set to: ${answer}`);
 
   } catch (error) {
-    // If Appium throws an interception or element not interactable error, catch it and move on
+    
     console.log(`⚠️ Could not interact with "${questionText}". Skipping to next column...`);
   }
 }
@@ -770,19 +770,19 @@ async function fillMultiplePregnancy(driver, answer) {
 async function fillHrpAndSubmit(driver) {
   const hrpText = "Who had identified as HRP? *";
 
-  // 1. First, scroll down to see if the element appears at the bottom
-  await scrollDownToText(driver, hrpText, 3); // Max 3 scrolls to check
+  
+  await scrollDownToText(driver, hrpText, 3); 
 
-  // 2. Check if the specific spinner exists
+  
   const hrpSpinner = await driver.$(`//android.widget.Spinner[@text="${hrpText}"]`);
   const isHrpPresent = await hrpSpinner.isExisting();
 
   if (isHrpPresent) {
     console.log('⚠️ HRP field detected. Processing...');
     await hrpSpinner.click();
-    await driver.pause(1500); // Wait for dropdown to fully open
+    await driver.pause(1500); 
 
-    // Get the coordinates from your HRP_COORDS object
+    
     const coords = HRP_COORDS[FORM_DATA.hrpIdentifier];
     if (!coords) {
       throw new Error(`❌ HRP choice "${FORM_DATA.hrpIdentifier}" not found in coordinates object.`);
@@ -795,7 +795,7 @@ async function fillHrpAndSubmit(driver) {
     console.log('⏭ HRP field not present. Skipping directly to Submit...');
   }
 
-  // 3. Find and click the Submit button
+  
   await scrollDownToText(driver, "Submit", 3);
   const submitBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_submit")');
 
@@ -804,7 +804,7 @@ async function fillHrpAndSubmit(driver) {
   console.log('✔ Form submitted successfully');
 }
 
-// ── Exported Execution Function ───────────────────────────────────────────────
+
 async function fillPregnancyForm(driver) {
   await fillDateOfRegistration(driver);
   await driver.pause(1000);
@@ -823,12 +823,12 @@ async function fillPregnancyForm(driver) {
 
   await fillFirstPregnancy(driver, "No");
   await driver.pause(1000);
-  // New Delivery History logic
+  
   await fillMoreThanThreeDeliveries(driver, FORM_DATA.moreThanThreeDeliveries);
   await driver.pause(1000);
   await fillTimeFromLastDelivery(driver, FORM_DATA.timeFromLastDelivery);
   await driver.pause(1000);
-  // New Delivery History logic
+  
   await fillHeightShortness(driver, FORM_DATA.heightShortness);
   await driver.pause(1000);
   await fillAgeRiskFactor(driver, FORM_DATA.ageRiskFactor);
@@ -842,7 +842,7 @@ async function fillPregnancyForm(driver) {
   await fillMultiplePregnancy(driver, FORM_DATA.multiplePregnancy);
   await driver.pause(1000);
 
-  // Replaced submitForm with combined HRP & Submit handler
+  
   await fillHrpAndSubmit(driver);
 }
 

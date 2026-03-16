@@ -1,13 +1,12 @@
 const { remote } = require('webdriverio');
 
-// 1. Define your Appium Capabilities
 const capabilities = {
     platformName: 'Android',
     'appium:automationName': 'UiAutomator2',
-    'appium:deviceName': 'emulator-5554', // Change to your actual device name or ID
-    'appium:appPackage': 'org.piramalswasthya.sakhi.saksham.uat', // ✅ Updated Package ID
+    'appium:deviceName': 'emulator-5554',
+    'appium:appPackage': 'org.piramalswasthya.sakhi.saksham.uat',
     'appium:appActivity': '.ui.login.LoginActivity',
-    'appium:noReset': true // Keeps you logged in between test runs
+    'appium:noReset': true
 };
 
 const wdioOptions = {
@@ -18,7 +17,6 @@ const wdioOptions = {
     logLevel: 'error'
 };
 
-// 2. Click All Beneficiaries
 async function clickAllBeneficiaries(driver) {
     console.log("👆 Clicking on All Beneficiaries...");
 
@@ -30,31 +28,30 @@ async function clickAllBeneficiaries(driver) {
     console.log("✅ Successfully clicked All Beneficiaries");
 }
 
-// 3. Search and Click ABHA
-async function searchAndClickAbha(driver, nameToSearch) {
-    console.log(`🔍 Searching for: ${nameToSearch}`);
 
-    // Find and click the Search Box
-    const searchBox = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/searchView")'); // ✅ Updated ID
-    await searchBox.waitForDisplayed({ timeout: 5000 });
-    await searchBox.click();
+async function scrollAndClickAbha(driver, nameToSearch) {
+    const exactNameInApp = nameToSearch.toUpperCase();
+    console.log(`🔍 Scrolling to find: ${exactNameInApp}...`);
 
-    // Type the name into the search box
-    await searchBox.setValue(nameToSearch);
 
-    if (await driver.isKeyboardShown()) {
-        await driver.hideKeyboard();
+    const scrollableSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("${exactNameInApp}")`;
+
+    try {
+        const nameElement = await driver.$(scrollableSelector);
+
+        await nameElement.waitForExist({ timeout: 15000 });
+        console.log(`✅ Found ${exactNameInApp} in the list!`);
+    } catch (error) {
+        console.error(`❌ Could not find ${exactNameInApp} after scrolling.`);
+        throw new Error(`Beneficiary ${exactNameInApp} not found in the list.`);
     }
 
-    // Brief pause to allow the list to filter
-    await driver.pause(2000);
+    await driver.pause(1000);
 
-    // Format the name to uppercase to match the app's UI exactly
-    const exactNameInApp = nameToSearch.toUpperCase();
     console.log(`👆 Clicking ABHA button for ${exactNameInApp}...`);
 
-    // Find the specific person's card, then find the ABHA button inside it
-    const abhaButtonXPath = `//android.widget.TextView[@text="${exactNameInApp}"]/ancestor::android.view.ViewGroup[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/contentLayout"]//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_abha"]`; // ✅ Updated IDs
+
+    const abhaButtonXPath = `//android.widget.TextView[@text="${exactNameInApp}"]/ancestor::android.view.ViewGroup[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/contentLayout"]//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_abha"]`;
 
     const abhaButton = await driver.$(abhaButtonXPath);
     await abhaButton.waitForDisplayed({ timeout: 5000 });
@@ -66,19 +63,15 @@ async function searchAndClickAbha(driver, nameToSearch) {
 async function createAbha(driver, aadhaarNumber, mobileNumber) {
     console.log("📝 Starting ABHA Creation process...");
 
-    // 1. Ensure we are on the "Create ABHA" tab
-    const createToggle = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/createToggle")'); // ✅ Updated ID
+    const createToggle = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/createToggle")');
     await createToggle.waitForDisplayed({ timeout: 5000 });
     await createToggle.click();
     console.log("✅ Selected 'Create ABHA' tab");
 
     await driver.pause(1000);
 
-    // 2. Fill the Aadhaar Number
-    // The Aadhaar input is split into 3 fields (4 digits each). We need to find all of them.
     console.log(`🔢 Entering Aadhaar Number: ${aadhaarNumber}`);
 
-    // Removing any spaces from the input just in case
     const cleanAadhaar = aadhaarNumber.replace(/\s/g, '');
 
     if (cleanAadhaar.length === 12) {
@@ -86,8 +79,7 @@ async function createAbha(driver, aadhaarNumber, mobileNumber) {
         const part2 = cleanAadhaar.substring(4, 8);
         const part3 = cleanAadhaar.substring(8, 12);
 
-        // Find all EditTexts inside the Aadhaar input container
-        const aadhaarInputs = await driver.$$('//android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/tiet_aadhaar_number"]//android.widget.EditText'); // ✅ Updated ID
+        const aadhaarInputs = await driver.$$('//android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/tiet_aadhaar_number"]//android.widget.EditText');
 
         if (aadhaarInputs.length === 3) {
             await aadhaarInputs[0].setValue(part1);
@@ -105,9 +97,8 @@ async function createAbha(driver, aadhaarNumber, mobileNumber) {
         await driver.hideKeyboard();
     }
 
-    // 3. Fill the Mobile Number
     console.log(`📱 Entering Mobile Number: ${mobileNumber}`);
-    const mobileInput = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/tiet_mobile_number")'); // ✅ Updated ID
+    const mobileInput = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/tiet_mobile_number")');
     await mobileInput.setValue(mobileNumber);
 
     if (await driver.isKeyboardShown()) {
@@ -117,20 +108,17 @@ async function createAbha(driver, aadhaarNumber, mobileNumber) {
 
     await driver.pause(1000);
 
-    // 4. Click the Consent View/Checkbox
     console.log("👆 Accepting Consent...");
-    // The developer made a specific view clickable for the consent instead of just the checkbox
-    const consentClickView = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/clickview")'); // ✅ Updated ID
+
+    const consentClickView = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/clickview")');
     await consentClickView.click();
     console.log("✅ Consent accepted");
 
     await driver.pause(1000);
 
-    // 5. Click "Send OTP"
     console.log("👆 Clicking 'Send OTP'...");
-    const sendOtpBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_verify_aadhaar")'); // ✅ Updated ID
+    const sendOtpBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_verify_aadhaar")');
 
-    // Wait for the button to become enabled (it usually enables after consent is checked and valid data is entered)
     await driver.waitUntil(
         async () => await sendOtpBtn.isEnabled(),
         {
@@ -146,35 +134,33 @@ async function createAbha(driver, aadhaarNumber, mobileNumber) {
 async function markAllAndAgree(driver) {
     console.log("📝 Handling ABHA Consent screen...");
 
-    // Wait for consent screen
     const title = await driver.$(
-        'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/tvTitleDeclaration")' // ✅ Updated ID
+        'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/tvTitleDeclaration")'
     );
     await title.waitForDisplayed({ timeout: 10000 });
 
-    console.log("☑️ Clicking MASTER checkbox (first one)...");
+    console.log("☑️ Verifying and clicking all consent checkboxes...");
 
-    // Click the FIRST checkbox inside RecyclerView
-    const firstCheckbox = await driver.$(
-        '(//androidx.recyclerview.widget.RecyclerView//*[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/checkBox"])[1]' // ✅ Updated ID
-    );
 
-    await firstCheckbox.waitForDisplayed({ timeout: 5000 });
+    const checkboxes = await driver.$$('//android.widget.CheckBox[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/checkBox"]');
 
-    const isChecked = await firstCheckbox.getAttribute("checked");
 
-    if (isChecked === "false") {
-        await firstCheckbox.click();
-        console.log("✅ Master checkbox clicked — all boxes selected");
-    } else {
-        console.log("ℹ️ Already checked");
+    for (let i = 0; i < checkboxes.length; i++) {
+        const isChecked = await checkboxes[i].getAttribute("checked");
+
+        if (isChecked === "false") {
+            await checkboxes[i].click();
+            console.log(`✅ Clicked checkbox ${i + 1}`);
+            await driver.pause(500); // Brief pause to allow UI to register the click
+        } else {
+            console.log(`ℹ️ Checkbox ${i + 1} was already checked`);
+        }
     }
 
     await driver.pause(1000);
 
-    // Click I Agree
     const agreeBtn = await driver.$(
-        'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_accept")' // ✅ Updated ID
+        'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_accept")'
     );
 
     await agreeBtn.waitForDisplayed({ timeout: 5000 });
@@ -182,24 +168,86 @@ async function markAllAndAgree(driver) {
 
     console.log("🎉 Clicked I Agree successfully!");
 }
+async function waitForManualOtpAndVerify(driver, otpName = "OTP") {
+    console.log(`⏳ You have 30 seconds to manually enter the ${otpName} on the device/emulator...`);
 
-// 4. Main Execution Block
+    // Wait for 30 seconds (30,000 milliseconds)
+    await driver.pause(30000);
+
+    console.log(`⏳ 30 seconds are up! Attempting to click 'Verify OTP' for ${otpName}...`);
+
+    // Locate the Verify OTP button using its resource ID
+    const verifyOtpBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_verify_OTP")');
+
+    try {
+        // Wait up to 5 seconds to make sure the button became enabled after your manual input
+        await driver.waitUntil(
+            async () => await verifyOtpBtn.isEnabled(),
+            {
+                timeout: 5000,
+                timeoutMsg: `Verify OTP button is still disabled. Did you enter the full 6-digit ${otpName}?`
+            }
+        );
+
+         
+        await verifyOtpBtn.click();
+        console.log(`✅ Clicked 'Verify OTP' for ${otpName} successfully!`);
+
+    } catch (error) {
+        console.error(`❌ Failed to verify ${otpName}: ${error.message}`);
+        throw error;
+    }
+}
+
+async function declineAbhaDownload(driver) {
+    console.log("📝 Checking for ABHA download prompt...");
+
+
+    const noButton = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_download_abha_no")');
+
+    try {
+
+        await noButton.waitForDisplayed({ timeout: 10000 });
+        await noButton.click();
+        console.log("✅ Clicked 'No' for downloading the ABHA card!");
+    } catch (error) {
+        console.error(`❌ Could not find or click the 'No' button: ${error.message}`);
+        throw error;
+    }
+}
 async function main() {
     console.log("🚀 Starting Appium session...");
     const driver = await remote(wdioOptions);
 
     try {
-        // Wait for the Dashboard to load fully
         await driver.pause(3000);
 
-        // Execute the flow
         await clickAllBeneficiaries(driver);
-        await driver.pause(2000); // Wait for beneficiaries list to load
-
-        await searchAndClickAbha(driver, "Rahul sharma");
         await driver.pause(2000);
-        await createAbha(driver, "264396640972", "9391345768");
+
+        await scrollAndClickAbha(driver, "KAVITA VERMA");
+        await driver.pause(2000);
+
+
+        await createAbha(driver, "379337136926", "9014984113");
+
+
+        await waitForManualOtpAndVerify(driver, "Aadhaar OTP");
+
+        await driver.pause(3000);
+
+
         await markAllAndAgree(driver);
+
+        await driver.pause(3000);
+
+
+        await waitForManualOtpAndVerify(driver, "Mobile OTP");
+        await driver.pause(3000);
+
+
+        await declineAbhaDownload(driver);
+
     } catch (error) {
         console.error("❌ Test Failed:", error);
     } finally {
@@ -211,5 +259,5 @@ async function main() {
     }
 }
 
-// Run the script
+
 main();

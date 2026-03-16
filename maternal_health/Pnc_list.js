@@ -1,6 +1,6 @@
 const { remote } = require('webdriverio');
 
-// --- Capabilities ---
+
 const capabilities = {
     platformName: 'Android',
     'appium:automationName': 'UiAutomator2',
@@ -11,41 +11,41 @@ const capabilities = {
     'appium:enforceXPath1': true
 };
 
-// --- Constants & Data ---
+
 const FORM_DATA = {
     deliveryDate: { day: 5, month: 3, year: 2026 },
     pncPeriod: 'Day 1',
     pncVisitDate: { day: 6, month: 3, year: 2026 },
 
-    // Mother Death Data
-    maternalDeath: 'No', // Change to 'No' to skip to IFA tablets
+    
+    maternalDeath: 'No', 
     deathDate: { day: 7, month: 3, year: 2026 },
     causeOfDeath: 'HIGH FEVER',
     placeOfDeath: 'Other Place of Death',
     otherPlaceOfDeathText: 'Test Place',
     otherDeathCauseText: 'High fever leading to severe complications',
 
-    // IFA Tablets
+    
     ifaTablets: '15',
 
-    // Family Planning Data
+    
     ppcStarted: 'Yes',
     contraceptionMethod: 'CONDOM',
 
-    // Danger Signs Data
+    
     dangerSigns: 'Yes',
     dangerSignOption: 'FEVER',
 
-    // Referral Data
+    
     referralFacility: 'Other Private Hospital',
 
-    // Additional Information
+    
     remarks: 'Patient seems stable',
 
-    // File Upload Config
-    uploadDischargeSummary: true, // Set to false to skip the upload step
-    numberOfSummariesToUpload: 4, // Change to 1, 2, 3, or 4 depending on how many you want
-    manualWaitTime: 30000 // 30 seconds to let you manually pick from gallery per photo
+    
+    uploadDischargeSummary: true, 
+    numberOfSummariesToUpload: 4, 
+    manualWaitTime: 30000 
 };
 
 const MONTH_NAMES = [
@@ -62,7 +62,7 @@ const CALENDAR = {
     yearHeader:    { x: 280, y: 670 },
 };
 
-// --- Dropdown Coordinates ---
+
 const PNC_PERIOD_ARROW = { x: 970, y: 664 };
 const PNC_PERIOD_COORDS = {
     'Day 1': { x: 500, y: 800 },
@@ -74,10 +74,10 @@ const PNC_PERIOD_COORDS = {
     'Day 42': { x: 500, y: 1460 }
 };
 
-// Probable Cause of Death arrow
+
 const CAUSE_OF_DEATH_ARROW = { x: 970, y: 1400 };
 
-// Cause of Death dropdown items
+
 const CAUSE_OF_DEATH_COORDS = {
     'ECLAMPSIA':         { x: 500, y: 530 },
     'HAEMORRHAGE (PPH)': { x: 500, y: 650 },
@@ -88,10 +88,10 @@ const CAUSE_OF_DEATH_COORDS = {
     'Any Other':         { x: 500, y: 1250 }
 };
 
-// Place of Death arrow
+
 const PLACE_OF_DEATH_ARROW = { x: 970, y: 1580 };
 
-// Place of Death dropdown items
+
 const PLACE_OF_DEATH_COORDS = {
     'Home':                     { x: 500, y: 500 },
     'Subcenter':                { x: 500, y: 620 },
@@ -104,7 +104,7 @@ const PLACE_OF_DEATH_COORDS = {
     'Other Place of Death':     { x: 500, y: 1460 }
 };
 
-// ── W3C Actions Helpers (Crash-Proof) ─────────────────────────────────────────
+
 async function tapAt(driver, x, y) {
     await driver.performActions([{
         type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
@@ -125,9 +125,9 @@ async function scrollDownToText(driver, text, maxScrolls = 5) {
         try {
             const element = await driver.$(elementXPath);
             if ((await element.isExisting()) && (await element.isDisplayed())) {
-                return; // Element found, stop scrolling
+                return; 
             }
-        } catch (e) { } // Keep scrolling
+        } catch (e) { } 
 
         const size = await driver.getWindowRect();
         const startX = Math.floor(size.width / 2);
@@ -149,7 +149,7 @@ async function scrollDownToText(driver, text, maxScrolls = 5) {
     }
 }
 
-// ── Calendar Helpers ──────────────────────────────────────────────────────────
+
 async function getCalendarMonthYear(driver) {
     try {
         const dayElement = await driver.$('android=new UiSelector().text("15")');
@@ -215,7 +215,7 @@ async function scrollAndAddPncVisit(driver, patientFirstName) {
     await addVisitBtn.click();
 }
 
-// ── Form Filling Functions ────────────────────────────────────────────────────
+
 async function fillDateOfDelivery(driver) {
     console.log('Processing Date of Delivery...');
     await scrollDownToText(driver, "Date of Delivery *", 2);
@@ -553,11 +553,11 @@ async function handleDischargeSummary(driver) {
     }
 }
 
-// ── NEW: Submit Function ──────────────────────────────────────────────────────
+
 async function submitForm(driver) {
     console.log('Attempting to Submit form...');
 
-    // Scroll down multiple times to ensure we hit the absolute bottom of the form
+    
     await scrollDownToText(driver, "Submit", 4);
 
     const submitBtn = await driver.$('//android.widget.Button[@text="Submit" or @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_submit"]');
@@ -582,7 +582,7 @@ async function fillPncForm(driver) {
     await fillPncVisitDate(driver);
     await driver.pause(1000);
 
-    // Select Mother Death
+    
     await fillMotherDeath(driver);
     await driver.pause(2000);
 
@@ -599,7 +599,7 @@ async function fillPncForm(driver) {
         await fillOtherDeathCause(driver);
         await driver.pause(1000);
     } else {
-         // ONLY fill these if Maternal Death is 'No'
+         
          await fillIfaTablets(driver);
          await driver.pause(1000);
 
@@ -616,13 +616,13 @@ async function fillPncForm(driver) {
          await driver.pause(1000);
     }
 
-    // This triggers regardless of Mother Death Yes/No
+    
     if (FORM_DATA.uploadDischargeSummary) {
          await handleDischargeSummary(driver);
          await driver.pause(1000);
     }
 
-    // Submit the form
+    
     await submitForm(driver);
     await driver.pause(2000);
 

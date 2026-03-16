@@ -1,11 +1,11 @@
 const { remote } = require('webdriverio');
 
-// --- Constants & Data ---
+
 const FORM_DATA = {
-    // Add the MDSR Date here:
+    
     mdsrDate: { day: 12, month: 3, year: 2026 },
 
-    // You can add more MDSR fields here later (like Cause of Death, etc.)
+    
 };
 
 const MONTH_NAMES = [
@@ -22,7 +22,7 @@ const CALENDAR = {
     yearHeader:    { x: 280, y: 670 },
 };
 
-// ── W3C Actions Helpers ─────────────────────────────────────────
+
 async function tapAt(driver, x, y) {
     await driver.performActions([{
         type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
@@ -62,9 +62,9 @@ async function scrollDownToText(driver, text, maxScrolls = 3) {
         try {
             const element = await driver.$(elementXPath);
             if ((await element.isExisting()) && (await element.isDisplayed())) {
-                return; // Element found, stop scrolling
+                return; 
             }
-        } catch (e) { } // Keep scrolling
+        } catch (e) { } 
 
         const size = await driver.getWindowRect();
         const startX = Math.floor(size.width / 2);
@@ -132,7 +132,7 @@ async function pickDateFromCalendar(driver, dateObj) {
 
     await navigateToMonth(driver, month, year);
 
-    // FIXED: Uses robust text clicking
+    
     const formattedDay = String(day);
     const dayToClick = await driver.$(`android=new UiSelector().text("${formattedDay}").clickable(true)`);
     await dayToClick.click();
@@ -142,22 +142,22 @@ async function pickDateFromCalendar(driver, dateObj) {
     await okBtn.click();
 }
 
-// ── MDSR Form Filling Functions ────────────────────────────────────────────────────
+
 async function fillMdsrDate(driver) {
     console.log('Processing MDSR Date...');
 
-    // Scroll down just in case it's off-screen
+    
     await scrollDownToText(driver, "Date", 2);
 
-    // Locate the exact field using the hint from your XML
+    
     const field = await driver.$('//android.widget.EditText[@text="Date" or @hint="Date"]');
     await field.waitForDisplayed({ timeout: 5000 });
 
     if (await isEmpty(field, 'Date')) {
         await field.click();
-        await driver.pause(1000); // Wait for the calendar popup to appear
+        await driver.pause(1000); 
 
-        // Call your robust calendar helper
+        
         await pickDateFromCalendar(driver, FORM_DATA.mdsrDate);
         console.log('✔ MDSR Date filled successfully.');
     } else {
@@ -167,24 +167,24 @@ async function fillMdsrDate(driver) {
 async function uploadDocument(driver, documentName) {
     console.log(`Processing Document Upload: ${documentName}...`);
 
-    // Scroll to make sure the specific document label is visible
+    
     await scrollDownToText(driver, documentName, 2);
 
-    // Locate the "add file" button directly next to the specific text
+    
     const addFileBtn = await driver.$(`//android.widget.TextView[@text="${documentName}"]/following-sibling::android.widget.ImageView[@content-desc="add file"]`);
 
     if (await addFileBtn.isExisting() && await addFileBtn.isDisplayed()) {
         await addFileBtn.click();
-        await driver.pause(1500); // Wait for the modal menu to pop up
+        await driver.pause(1500); 
 
-        // Locate and click "Pick from Gallery"
+        
         const galleryBtn = await driver.$('//android.widget.Button[@text="Pick from Gallery" or @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btnGallery"]');
 
         if (await galleryBtn.isExisting()) {
             await galleryBtn.click();
             console.log(`⏳ Clicked "Pick from Gallery" for ${documentName}. PLEASE PICK AN IMAGE NOW. Waiting 20 seconds...`);
 
-            // Wait for 20 seconds as requested
+            
             await driver.pause(20000);
             console.log(`✔ Finished waiting for ${documentName} upload.`);
         } else {
@@ -198,7 +198,7 @@ async function uploadDocument(driver, documentName) {
 async function clickSubmitButton(driver) {
     console.log('Clicking Submit button...');
 
-    // Scroll down to ensure Submit is visible
+    
     await scrollDownToText(driver, "Submit", 2);
     const submitBtn = await driver.$('//android.widget.Button[@text="Submit" or @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_submit"]');
 
@@ -213,25 +213,25 @@ async function clickSubmitButton(driver) {
 async function fillMdsrForm(driver) {
     console.log("--- Starting MDSR Form Entry ---");
 
-    // 1. Fill the Date using your existing function
+    
     await fillMdsrDate(driver);
     await driver.pause(1000);
 
-    // ... [Call functions for any other text fields here] ...
+    
 
-    // 2. Upload ANM 1 Form
+    
     await uploadDocument(driver, "MDSR form from ANM 1");
     await driver.pause(1000);
 
-    // 3. Upload ANM 2 Form
+    
     await uploadDocument(driver, "MDSR form from ANM 2");
     await driver.pause(1000);
 
-    // 4. Upload Death Certificate
+    
     await uploadDocument(driver, "Death Certificate");
     await driver.pause(1000);
 
-    // 5. Submit the Form
+    
     await clickSubmitButton(driver);
     await driver.pause(2000);
 

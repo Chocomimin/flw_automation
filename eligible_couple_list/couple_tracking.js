@@ -8,7 +8,7 @@ const capabilities = {
     'appium:appActivity': 'org.piramalswasthya.sakhi.ui.login_activity.LoginActivity',
     'appium:noReset': true,
     'appium:enforceXPath1': true,
-    // ── Stability settings to prevent UiAutomator2 crashes ──
+
     'appium:uiautomator2ServerInstallTimeout': 60000,
     'appium:uiautomator2ServerLaunchTimeout': 60000,
     'appium:uiautomator2ServerReadTimeout': 60000,
@@ -26,7 +26,7 @@ const wdioOptions = {
     path: '/',
     capabilities,
     logLevel: 'error',
-    // Increase connection timeout
+
     connectionRetryTimeout: 120000,
     connectionRetryCount: 3,
 };
@@ -37,10 +37,10 @@ const BENEFICIARY_NAME = 'SUMI KALANDI';
 const FORM_DATA = {
     dateOfVisit:               { day: 6, month: 3, year: 2026 },
     lmpDate:                   { day: 1, month: 1, year: 2026 },
-    isPregnancyTestDone:       'Yes',       // 'Yes' or 'No'
-    pregnancyTestResult:       'Positive',  // 'Positive' or 'Negative'
-    isWomanPregnant:           'No',        // 'Yes' or 'No' — only when Positive
-    usingFamilyPlanningMethod: 'No'         // 'Yes' or 'No' — only when No or Negative
+    isPregnancyTestDone:       'Yes',
+    pregnancyTestResult:       'Positive',
+    isWomanPregnant:           'No',
+    usingFamilyPlanningMethod: 'No'
 };
 
 const MONTH_NAMES = [
@@ -49,10 +49,10 @@ const MONTH_NAMES = [
     'October', 'November', 'December'
 ];
 
-// ─────────────────────────────────────────────────────────
-// SAFE WRAPPER — retries an action up to N times if
-// UiAutomator2 crashes (instrumentation process not running)
-// ─────────────────────────────────────────────────────────
+
+
+
+
 async function safeAction(driver, actionFn, retries = 3, delayMs = 3000) {
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
@@ -71,7 +71,7 @@ async function safeAction(driver, actionFn, retries = 3, delayMs = 3000) {
                 console.warn('   Waiting for device to recover...');
                 await new Promise(r => setTimeout(r, delayMs));
 
-                // Wake + unlock the device in case screen went off
+
                 try {
                     await driver.execute('mobile: shell', {
                         command: 'input',
@@ -93,18 +93,18 @@ async function safeAction(driver, actionFn, retries = 3, delayMs = 3000) {
     }
 }
 
-// ─────────────────────────────────────────────────────────
-// SAFE FIND — waits for element and retries if not found
-// ─────────────────────────────────────────────────────────
+
+
+
 async function safeFind(driver, xpath, timeout = 8000) {
     const el = await driver.$(xpath);
     await el.waitForDisplayed({ timeout });
     return el;
 }
 
-// ─────────────────────────────────────────────────────────
-// Calendar helpers
-// ─────────────────────────────────────────────────────────
+
+
+
 async function getCalendarMonthYear(driver) {
     try {
         const cells = await driver.$$('//android.view.View[@resource-id="android:id/month_view"]/android.view.View');
@@ -178,15 +178,15 @@ async function fillDateField(driver, hint, day, month, year) {
     });
 }
 
-// ─────────────────────────────────────────────────────────
-// FIXED selectRadio — scoped strictly to the correct
-// RadioGroup inside each question's ll_content container
-// ─────────────────────────────────────────────────────────
+
+
+
+
 async function selectRadio(driver, questionText, optionText) {
     console.log(`\n🔘 "${questionText.substring(0, 60)}" → "${optionText}"`);
 
     await safeAction(driver, async () => {
-        // Scroll to question
+
         try {
             await driver.execute('mobile: scroll', {
                 strategy: '-android uiautomator',
@@ -195,8 +195,8 @@ async function selectRadio(driver, questionText, optionText) {
             await driver.pause(1000);
         } catch (_) {}
 
-        // Strictly scoped XPath:
-        // question TextView → up to ll_content → down into its OWN RadioGroup → RadioButton
+
+
         const xp =
             `//android.widget.TextView[@text="${questionText}"]` +
             `/ancestor::android.widget.LinearLayout[@resource-id="${PACKAGE}:id/ll_content"]` +
@@ -206,7 +206,7 @@ async function selectRadio(driver, questionText, optionText) {
         const radio = await driver.$(xp);
         await radio.waitForDisplayed({ timeout: 8000 });
 
-        // Double-check we have the right element
+
         const actualText = await radio.getText();
         if (actualText !== optionText) {
             throw new Error(`Wrong radio found: expected "${optionText}" but got "${actualText}"`);
@@ -218,10 +218,10 @@ async function selectRadio(driver, questionText, optionText) {
         }
 
         await radio.click();
-        await driver.pause(1500); // longer pause to let conditional fields render
+        await driver.pause(1500);
         console.log(`   ✅ "${optionText}" selected`);
 
-        // Verify it was actually selected
+
         const checked = await radio.getAttribute('checked');
         if (checked !== 'true') {
             console.warn(`   ⚠️  Radio may not have been selected, retrying click...`);
@@ -239,37 +239,37 @@ async function scrollFormDown(driver) {
     await driver.pause(1000);
 }
 
-// ═══════════════════════════════════════════════════════
-// FORM FILLER
-// ═══════════════════════════════════════════════════════
+
+
+
 async function fillECTrackingForm(driver) {
     console.log('\n📝 Filling EC Tracking Form for:', BENEFICIARY_NAME);
     console.log('─────────────────────────────────────────');
 
-    // 1. Date of Visit
+
     await fillDateField(driver, 'Date of Visit *',
         FORM_DATA.dateOfVisit.day,
         FORM_DATA.dateOfVisit.month,
         FORM_DATA.dateOfVisit.year
     );
 
-    // 2. LMP Date
+
     await fillDateField(driver, 'LMP Date *',
         FORM_DATA.lmpDate.day,
         FORM_DATA.lmpDate.month,
         FORM_DATA.lmpDate.year
     );
 
-    // 3. Is Pregnancy Test Done?
-    await selectRadio(driver, 'Is Pregnancy Test done?', FORM_DATA.isPregnancyTestDone);
-    await driver.pause(1500); // wait for next conditional field
 
-    // ── CONDITIONAL BRANCH ──────────────────────────────────
+    await selectRadio(driver, 'Is Pregnancy Test done?', FORM_DATA.isPregnancyTestDone);
+    await driver.pause(1500);
+
+
     if (FORM_DATA.isPregnancyTestDone === 'No') {
 
-        // ╔═══════════════════════════════════════════════╗
-        // ║  BRANCH A: Test = No → Family Planning only  ║
-        // ╚═══════════════════════════════════════════════╝
+
+
+
         console.log('\n📌 Branch A: Test = No → Family Planning');
         await selectRadio(driver,
             'Are you using Family Planning Method? or Do you want to use any Planning Method',
@@ -278,9 +278,9 @@ async function fillECTrackingForm(driver) {
 
     } else {
 
-        // ╔═══════════════════════════════════════════════╗
-        // ║  BRANCH B: Test = Yes → Pregnancy Result     ║
-        // ╚═══════════════════════════════════════════════╝
+
+
+
         console.log('\n📌 Branch B: Test = Yes → Pregnancy Test Result');
         await driver.pause(1500);
 
@@ -288,14 +288,14 @@ async function fillECTrackingForm(driver) {
             'Pregnancy Test Result *',
             FORM_DATA.pregnancyTestResult
         );
-        await driver.pause(1500); // wait for next conditional field
+        await driver.pause(1500);
 
         if (FORM_DATA.pregnancyTestResult === 'Positive') {
 
-            // ╔═════════════════════════════════════════════╗
-            // ║  BRANCH B1: Positive → Is woman pregnant?  ║
-            // ║  Family Planning NOT shown                  ║
-            // ╚═════════════════════════════════════════════╝
+
+
+
+
             console.log('\n📌 Branch B1: Positive → "Is the woman pregnant?"');
             await driver.pause(1500);
 
@@ -308,9 +308,9 @@ async function fillECTrackingForm(driver) {
 
         } else {
 
-            // ╔═════════════════════════════════════════════╗
-            // ║  BRANCH B2: Negative → Family Planning     ║
-            // ╚═════════════════════════════════════════════╝
+
+
+
             console.log('\n📌 Branch B2: Negative → Family Planning Method');
             await driver.pause(1000);
 
@@ -321,7 +321,7 @@ async function fillECTrackingForm(driver) {
         }
     }
 
-    // Submit
+
     console.log('\n🚀 Submitting...');
     await scrollFormDown(driver);
     await driver.pause(500);
@@ -335,9 +335,9 @@ async function fillECTrackingForm(driver) {
     });
 }
 
-// ═══════════════════════════════════════════════════════
-// NAVIGATION
-// ═══════════════════════════════════════════════════════
+
+
+
 async function clickEligibleCoupleTracking(driver) {
     console.log('👆 Clicking Eligible Couple Tracking...');
     const card = await driver.$(
@@ -388,9 +388,9 @@ async function clickAddVisitByScrolling(driver, name) {
     throw new Error(`Could not find ADD VISIT for "${name}"`);
 }
 
-// ═══════════════════════════════════════════════════════
-// ENTRY POINT
-// ═══════════════════════════════════════════════════════
+
+
+
 async function main() {
     console.log('🚀 Starting Appium session...\n');
     let driver;

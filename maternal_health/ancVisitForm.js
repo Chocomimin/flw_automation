@@ -1,21 +1,21 @@
 const { remote } = require('webdriverio');
 
-// --- Constants & Data ---
+
 const FORM_DATA = {
     ancDate: { day: 15, month: 2, year: 2024 },
     placeOfAnc: 'CHC',
     ancPeriod: '7',
 
-    // Maternal Death Selection ('Yes' or 'No')
+    
     maternalDeath: 'Yes',
     probableCauseOfDeath: 'ECLAMPSIA',
     placeOfDeath: 'Other Place of Death',
     otherPlaceOfDeath: 'On the way to hospital',
     deathDate: { day: 22, month: 2, year: 2024 },
-    // Has Delivered Selection ('Yes' or 'No')
+    
     delivered: 'Yes',
 
-    // Physical Measurements
+    
     weight: '65',
     bp: '120/80',
     hb: '12',
@@ -35,7 +35,7 @@ const MONTH_NAMES = [
     'October', 'November', 'December'
 ];
 
-// Android native DatePicker coordinates
+
 const CALENDAR = {
     prevMonthBtn:  { x: 274, y: 924 },
     nextMonthBtn:  { x: 806, y: 924 },
@@ -44,7 +44,7 @@ const CALENDAR = {
     yearHeader:    { x: 280, y: 670 },
 };
 
-// HIGHLY ACCURATE: Dropdown Coordinates for Place of ANC
+
 const PLACE_OF_ANC_ARROW = { x: 980, y: 580 };
 const PLACE_OF_ANC_COORDS = {
     'Sub-Centre':               { x: 500, y: 680 },
@@ -56,7 +56,7 @@ const PLACE_OF_ANC_COORDS = {
     'Medical College Hospital': { x: 500, y: 1280 }
 };
 
-// HIGHLY ACCURATE: Dropdown Coordinates for ANC Period
+
 const ANC_PERIOD_ARROW = { x: 980, y: 888 };
 const ANC_PERIOD_COORDS = {
     '4': { x: 500, y: 888 },
@@ -67,8 +67,8 @@ const ANC_PERIOD_COORDS = {
     '9': { x: 500, y: 1635 }
 };
 
-// Dropdown Coordinates for High Risk Conditions
-// Dropdown Coordinates for High Risk Conditions
+
+
 const HIGH_RISK_ARROW = { x: 980, y: 1615 };
 const HIGH_RISK_COORDS = {
     'NONE': { x: 500, y: 580 },
@@ -76,16 +76,16 @@ const HIGH_RISK_COORDS = {
     'CONVULSIONS': { x: 500, y: 820 },
     'VAGINAL BLEEDING': { x: 500, y: 940 },
     'FOUL SMELLING DISCHARGE': { x: 500, y: 1060 },
-    'SEVERE ANAEMIA (HB less than 7 gm/dl)': { x: 500, y: 1180 }, // Shifted up from 1300
+    'SEVERE ANAEMIA (HB less than 7 gm/dl)': { x: 500, y: 1180 }, 
     'DIABETES': { x: 500, y: 1300 },
     'TWINS': { x: 500, y: 1420 },
     'OTHER': { x: 500, y: 1540 }
 };
 
-// HIGHLY ACCURATE: Dropdown Coordinates for Referral Facility
-// HIGHLY ACCURATE: Dropdown Coordinates for Referral Facility
-// HIGHLY ACCURATE: Dropdown Coordinates for Referral Facility
-// HIGHLY ACCURATE: Dropdown Coordinates for Referral Facility
+
+
+
+
 const REFERRAL_FACILITY_ARROW = { x: 980, y: 1770 };
 const REFERRAL_FACILITY_COORDS = {
     'Primary Health Centre':   { x: 500, y: 1350 },
@@ -93,7 +93,7 @@ const REFERRAL_FACILITY_COORDS = {
     'District Hospital':       { x: 500, y: 1470 },
     'Other Private Hospital':  { x: 500, y: 1710 }
 };
-// ── W3C Actions Helpers ─────────────────────────────────────────
+
 async function tapAt(driver, x, y) {
     await driver.performActions([{
         type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
@@ -133,9 +133,9 @@ async function scrollDownToText(driver, text, maxScrolls = 3) {
         try {
             const element = await driver.$(elementXPath);
             if ((await element.isExisting()) && (await element.isDisplayed())) {
-                return; // Element found, stop scrolling
+                return; 
             }
-        } catch (e) { } // Keep scrolling
+        } catch (e) { } 
 
         const size = await driver.getWindowRect();
         const startX = Math.floor(size.width / 2);
@@ -212,7 +212,7 @@ async function pickDateFromCalendar(driver, dateObj) {
     await okBtn.click();
 }
 
-// ── Form Filling Functions ────────────────────────────────────────────────────
+
 async function fillAncDate(driver) {
     console.log('Processing ANC Date...');
     const field = await driver.$('//android.widget.EditText[@text="ANC Date *" or @hint="ANC Date *"]');
@@ -455,7 +455,7 @@ async function fillHighRisk(driver) {
     console.log('Processing "Any High Risk conditions"...');
     await scrollDownToText(driver, "Any High Risk conditions", 3);
 
-    // 1. Select the Radio Button (Yes/No)
+    
     const radioXPath = `//android.widget.TextView[@text="Any High Risk conditions"]/parent::android.widget.LinearLayout/following-sibling::android.widget.RadioGroup/android.widget.RadioButton[@text="${FORM_DATA.highRisk}"]`;
     const radioButton = await driver.$(radioXPath);
 
@@ -469,15 +469,15 @@ async function fillHighRisk(driver) {
         }
     } else {
         console.error('❌ Could not find "Any High Risk conditions" radio buttons.');
-        return; // Exit the function early if radio button isn't found
+        return; 
     }
 
-    // 2. If 'Yes' was clicked, interact with the Dropdown
+    
     if (FORM_DATA.highRisk === 'Yes') {
-        await driver.pause(1500); // Give the app a second to expand the dropdown menu
+        await driver.pause(1500); 
         await scrollDownToText(driver, "High Risk Conditions", 2);
 
-        // Using a robust structural XPath since @hint is sometimes ignored by Appium
+        
         const spinnerXPath = `//android.widget.TextView[@text="Any High Risk conditions"]/ancestor::android.widget.LinearLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/cl_ri"]/following-sibling::android.view.ViewGroup//android.widget.Spinner`;
         const spinner = await driver.$(spinnerXPath);
 
@@ -485,11 +485,11 @@ async function fillHighRisk(driver) {
             const currentText = await spinner.getText();
 
             if (currentText !== FORM_DATA.highRiskCondition) {
-                // Tap the dropdown arrow
+                
                 await tapAt(driver, HIGH_RISK_ARROW.x, HIGH_RISK_ARROW.y);
                 await driver.pause(1500);
 
-                // Select the option via coordinates
+                
                 const coords = HIGH_RISK_COORDS[FORM_DATA.highRiskCondition];
                 if (coords) {
                     await tapAt(driver, coords.x, coords.y);
@@ -509,7 +509,7 @@ async function fillHighRisk(driver) {
 async function fillHighRiskConditionDropdown(driver) {
     console.log('Processing High Risk Conditions Dropdown...');
 
-    // The XML shows the hint is "High Risk Conditions"
+    
     const spinner = await driver.$('//android.widget.Spinner[@hint="High Risk Conditions"]');
 
     if (await spinner.isExisting()) {
@@ -517,11 +517,11 @@ async function fillHighRiskConditionDropdown(driver) {
 
         if (currentText !== FORM_DATA.highRiskCondition) {
 
-            // Tap the dropdown arrow
+            
             await tapAt(driver, HIGH_RISK_ARROW.x, HIGH_RISK_ARROW.y);
-            await driver.pause(1500); // Wait for the dropdown animation
+            await driver.pause(1500); 
 
-            // Grab the coordinates for the selected condition
+            
             const coords = HIGH_RISK_COORDS[FORM_DATA.highRiskCondition];
 
             if (coords) {
@@ -568,7 +568,7 @@ async function fillOtherHighRiskCondition(driver) {
 async function fillReferralFacility(driver) {
     console.log('Processing Referral Facility Dropdown...');
 
-    // Ensure we scroll down so the dropdown is fully visible on screen
+    
     await scrollDownToText(driver, "Referral Facility", 2);
 
     const spinner = await driver.$('//android.widget.Spinner[@text="Referral Facility" or @hint="Referral Facility"]');
@@ -578,31 +578,31 @@ async function fillReferralFacility(driver) {
 
         if (currentText !== FORM_DATA.referralFacility) {
 
-            // Locate the dropdown arrow specific to Referral Facility
+            
             const arrowXPath = `//android.widget.Spinner[@text="Referral Facility" or @hint="Referral Facility"]/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
             const dropdownArrow = await driver.$(arrowXPath);
 
             if (await dropdownArrow.isExisting()) {
 
-                // 1. Initial click to open the dropdown
+                
                 await dropdownArrow.click();
                 await driver.pause(1000);
 
-                // 2. Check if the keyboard opened instead of the dropdown list
+                
                 if (await driver.isKeyboardShown()) {
                     console.log('Keyboard opened unexpectedly. Closing keyboard and retrying dropdown click...');
                     await driver.hideKeyboard();
-                    await driver.pause(1000); // Wait for keyboard to fully hide
+                    await driver.pause(1000); 
 
-                    // Click the arrow again to actually open the dropdown list
+                    
                     await dropdownArrow.click();
-                    await driver.pause(1500); // Wait for list animation
+                    await driver.pause(1500); 
                 } else {
-                    // Keyboard didn't show, just wait the remaining time for the list animation
+                    
                     await driver.pause(500);
                 }
 
-                // HIGHLY ACCURATE: Adjusted coordinates based on the 1500 baseline
+                
                 const REFERRAL_FACILITY_COORDS = {
                     'Primary Health Centre':   { x: 500, y: 1500 },
                     'Community Health Centre': { x: 500, y: 1590 },
@@ -653,7 +653,7 @@ async function fillHrpConfirmed(driver) {
 async function fillIdentifiedAsHrp(driver) {
     console.log('Processing "Who had identified as HRP?"...');
 
-    // Scroll slightly to make sure the field is visible
+    
     await scrollDownToText(driver, "Who had identified as HRP?", 2);
 
     const spinnerXPath = `//android.widget.Spinner[contains(@text, "Who had identified as HRP?") or contains(@hint, "Who had identified as HRP?")]`;
@@ -664,17 +664,17 @@ async function fillIdentifiedAsHrp(driver) {
 
         if (currentText !== FORM_DATA.identifiedAsHrp) {
 
-            // Locate the dropdown arrow using the XML structure
+            
             const arrowXPath = `${spinnerXPath}/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
             const dropdownArrow = await driver.$(arrowXPath);
 
             if (await dropdownArrow.isExisting()) {
 
-                // 1. Initial click to open the dropdown
+                
                 await dropdownArrow.click();
                 await driver.pause(1000);
 
-                // 2. Handle unexpected keyboard popups
+                
                 if (await driver.isKeyboardShown()) {
                     console.log('Keyboard opened unexpectedly. Closing keyboard and retrying dropdown click...');
                     await driver.hideKeyboard();
@@ -686,8 +686,8 @@ async function fillIdentifiedAsHrp(driver) {
                     await driver.pause(500);
                 }
 
-                // HIGHLY ACCURATE: Shifted coordinates down.
-                // The popup starts around y:1715, safely below the "High Risk Conditions" dropdown.
+                
+                
                 const IDENTIFIED_AS_HRP_COORDS = {
                     'ANM':                           { x: 500, y: 1770 },
                     'CHO':                           { x: 500, y: 1880 },
@@ -717,7 +717,7 @@ async function fillIdentifiedAsHrp(driver) {
 async function fillReferralFacilityHighRiskNo(driver) {
     console.log('Processing Referral Facility Dropdown (High Risk = No)...');
 
-    // Scroll slightly to make sure the field is visible
+    
     await scrollDownToText(driver, "Referral Facility", 2);
 
     const spinner = await driver.$('//android.widget.Spinner[@text="Referral Facility" or @hint="Referral Facility"]');
@@ -727,36 +727,36 @@ async function fillReferralFacilityHighRiskNo(driver) {
 
         if (currentText !== FORM_DATA.referralFacility) {
 
-            // Locate the dropdown arrow specific to Referral Facility
+            
             const arrowXPath = `//android.widget.Spinner[@text="Referral Facility" or @hint="Referral Facility"]/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
             const dropdownArrow = await driver.$(arrowXPath);
 
             if (await dropdownArrow.isExisting()) {
 
-                // 1. Initial click to open the dropdown
+                
                 await dropdownArrow.click();
                 await driver.pause(1000);
 
-                // 2. Check if the keyboard opened instead of the dropdown list
+                
                 if (await driver.isKeyboardShown()) {
                     console.log('Keyboard opened unexpectedly. Closing keyboard and retrying dropdown click...');
                     await driver.hideKeyboard();
                     await driver.pause(1000);
 
-                    // Click the arrow again to actually open the dropdown list
+                    
                     await dropdownArrow.click();
                     await driver.pause(1500);
                 } else {
                     await driver.pause(500);
                 }
 
-                // HIGHLY ACCURATE: Shifted coordinates for the "No" state.
-                // Because intermediate fields are hidden, the menu now opens DOWNWARDS.
+                
+                
                 const REFERRAL_FACILITY_NO_RISK_COORDS = {
-                    'Primary Health Centre':   { x: 500, y: 1720 }, // Top option, right below the field
+                    'Primary Health Centre':   { x: 500, y: 1720 }, 
                     'Community Health Centre': { x: 500, y: 1830 },
                     'District Hospital':       { x: 500, y: 1940 },
-                    'Other Private Hospital':  { x: 500, y: 2050 }  // Bottom option
+                    'Other Private Hospital':  { x: 500, y: 2050 }  
                 };
 
                 const coords = REFERRAL_FACILITY_NO_RISK_COORDS[FORM_DATA.referralFacility];
@@ -782,7 +782,7 @@ async function fillReferralFacilityHighRiskNo(driver) {
 async function fillProbableCauseOfDeath(driver) {
     console.log('Processing Probable Cause of Death Dropdown...');
 
-    // Scroll to make sure it's fully visible
+    
     await scrollDownToText(driver, "Probable Cause of Death", 2);
 
     const spinnerXPath = `//android.widget.Spinner[contains(@text, "Probable Cause of Death") or contains(@hint, "Probable Cause of Death")]`;
@@ -793,30 +793,30 @@ async function fillProbableCauseOfDeath(driver) {
 
         if (currentText !== FORM_DATA.probableCauseOfDeath) {
 
-            // Locate the dropdown arrow using the standard structure
+            
             const arrowXPath = `${spinnerXPath}/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
             const dropdownArrow = await driver.$(arrowXPath);
 
             if (await dropdownArrow.isExisting()) {
 
-                // 1. Initial click to open the dropdown
+                
                 await dropdownArrow.click();
                 await driver.pause(1000);
 
-                // 2. Check if the keyboard opened instead of the dropdown list
+                
                 if (await driver.isKeyboardShown()) {
                     console.log('Keyboard opened unexpectedly. Closing keyboard and retrying dropdown click...');
                     await driver.hideKeyboard();
                     await driver.pause(1000);
 
-                    // Click the arrow again to actually open the dropdown list
+                    
                     await dropdownArrow.click();
                     await driver.pause(1500);
                 } else {
                     await driver.pause(500);
                 }
 
-                // HIGHLY ACCURATE: Downward coordinates based on the screenshot
+                
                 const CAUSE_OF_DEATH_COORDS = {
                     'ECLAMPSIA':   { x: 500, y: 1350 },
                     'HAEMORRHAGE': { x: 500, y: 1460 },
@@ -849,7 +849,7 @@ async function fillProbableCauseOfDeath(driver) {
 async function fillDeathDate(driver) {
     console.log('Processing Death Date...');
 
-    // Scroll down slightly to make sure the field is visible on screen
+    
     await scrollDownToText(driver, "Death Date", 2);
 
     const field = await driver.$('//android.widget.EditText[@text="Death Date *" or @hint="Death Date *"]');
@@ -857,9 +857,9 @@ async function fillDeathDate(driver) {
     if (await field.isExisting() && await field.isDisplayed()) {
         if (await isEmpty(field, 'Death Date *')) {
             await field.click();
-            await driver.pause(1000); // Wait for calendar popup
+            await driver.pause(1000); 
 
-            // Call your existing calendar helper
+            
             await pickDateFromCalendar(driver, FORM_DATA.deathDate);
             console.log('✔ Death Date filled successfully.');
         } else {
@@ -873,7 +873,7 @@ async function fillDeathDate(driver) {
 async function fillPlaceOfDeath(driver) {
     console.log('Processing Place of Death Dropdown...');
 
-    // Scroll to make sure it's fully visible
+    
     await scrollDownToText(driver, "Place of Death", 2);
 
     const spinnerXPath = `//android.widget.Spinner[contains(@text, "Place of Death") or contains(@hint, "Place of Death")]`;
@@ -884,33 +884,33 @@ async function fillPlaceOfDeath(driver) {
 
         if (currentText !== FORM_DATA.placeOfDeath) {
 
-            // Locate the dropdown arrow using the XML structure
+            
             const arrowXPath = `${spinnerXPath}/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
             const dropdownArrow = await driver.$(arrowXPath);
 
             if (await dropdownArrow.isExisting()) {
 
-                // 1. Initial click to open the dropdown
+                
                 await dropdownArrow.click();
                 await driver.pause(1000);
 
-                // 2. Check if the keyboard opened instead of the dropdown list
+                
                 if (await driver.isKeyboardShown()) {
                     console.log('Keyboard opened unexpectedly. Closing keyboard and retrying dropdown click...');
                     await driver.hideKeyboard();
                     await driver.pause(1000);
 
-                    // Click the arrow again to actually open the dropdown list
+                    
                     await dropdownArrow.click();
                     await driver.pause(1500);
                 } else {
                     await driver.pause(500);
                 }
 
-                // HIGHLY ACCURATE: Upward coordinates based on the screenshot
-                // The menu stretches high up the screen, so Y values get smaller at the top
+                
+                
                 const PLACE_OF_DEATH_COORDS = {
-                    'Home':                     { x: 500, y: 560 }, // Top-most option
+                    'Home':                     { x: 500, y: 560 }, 
                     'Subcenter':                { x: 500, y: 660 },
                     'PHC':                      { x: 500, y: 760 },
                     'CHC':                      { x: 500, y: 860 },
@@ -918,7 +918,7 @@ async function fillPlaceOfDeath(driver) {
                     'Medical College Hospital': { x: 500, y: 1060 },
                     'Private Hospital':         { x: 500, y: 1160 },
                     'In Transit':               { x: 500, y: 1260 },
-                    'Other Place of Death':     { x: 500, y: 1360 } // Bottom-most option, right above the field
+                    'Other Place of Death':     { x: 500, y: 1360 } 
                 };
 
                 const coords = PLACE_OF_DEATH_COORDS[FORM_DATA.placeOfDeath];
@@ -944,7 +944,7 @@ async function fillPlaceOfDeath(driver) {
 async function fillOtherPlaceOfDeath(driver) {
     console.log('Checking for "Other Place of Death" text field...');
 
-    // Scroll slightly to make sure the field is visible if it appeared
+    
     await scrollDownToText(driver, "Other Place of Death", 2);
 
     const otherField = await driver.$('//android.widget.EditText[contains(@hint, "Other Place of Death") or contains(@text, "Other Place of Death")]');
@@ -972,24 +972,24 @@ async function fillOtherPlaceOfDeath(driver) {
 async function uploadMcpCard(driver, sideName) {
     console.log(`Processing MCP Card (${sideName})...`);
 
-    // Scroll to make sure the specific side is visible
+    
     await scrollDownToText(driver, sideName, 2);
 
-    // Locate the "add file" button directly next to the specific text (Front Side / Back Side)
+    
     const addFileBtn = await driver.$(`//android.widget.TextView[@text="${sideName}"]/following-sibling::android.widget.ImageView[@content-desc="add file"]`);
 
     if (await addFileBtn.isExisting() && await addFileBtn.isDisplayed()) {
         await addFileBtn.click();
-        await driver.pause(1500); // Wait for the modal menu to pop up
+        await driver.pause(1500); 
 
-        // Locate and click "Pick from Gallery"
+        
         const galleryBtn = await driver.$('//android.widget.Button[@text="Pick from Gallery" or @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btnGallery"]');
 
         if (await galleryBtn.isExisting()) {
             await galleryBtn.click();
             console.log(`✔ Clicked "Pick from Gallery" for ${sideName}. Waiting 20 seconds...`);
 
-            // Wait for 20 seconds as requested
+            
             await driver.pause(20000);
         } else {
             console.error(`❌ Could not find "Pick from Gallery" button for ${sideName}.`);
@@ -1026,10 +1026,10 @@ async function fillAncForm(driver) {
     await driver.pause(1000);
 
     if (FORM_DATA.maternalDeath === 'Yes') {
-        // If Mother died, fill cause of death (and skip the rest of the measurements)
+        
         await fillProbableCauseOfDeath(driver);
         await driver.pause(1000);
-        await fillDeathDate(driver); // ✅ Call this first!
+        await fillDeathDate(driver); 
         await driver.pause(1000);
         await fillPlaceOfDeath(driver);
         await driver.pause(1000);
@@ -1051,7 +1051,7 @@ async function fillAncForm(driver) {
         await driver.pause(1000);
         await fillFundalHeight(driver);
         await driver.pause(1000);
-        // --- NEW LINE BELOW ---
+        
         await fillIfaTabs(driver);
         await driver.pause(1000);
         await fillHighRisk(driver);
@@ -1064,13 +1064,13 @@ async function fillAncForm(driver) {
             await fillReferralFacility(driver);
             await driver.pause(1000);
         } else {
-            // High Risk is 'No'
-            // Uses the new shifted coordinates
+            
+            
             await fillReferralFacilityHighRiskNo(driver);
             await driver.pause(1000);
         }
 
-        // --- NEW LINE ADDED HERE ---
+        
         await fillHrpConfirmed(driver);
         await driver.pause(1000);
         if (FORM_DATA.hrpConfirmed === 'Yes') {
@@ -1081,11 +1081,11 @@ async function fillAncForm(driver) {
     await uploadMcpCard(driver, "Front Side");
     await driver.pause(1000);
 
-    // 2. Upload Back Side
+    
     await uploadMcpCard(driver, "Back Side");
     await driver.pause(1000);
 
-    // 3. Click final Submit
+    
     await clickSubmitButton(driver);
 }
 

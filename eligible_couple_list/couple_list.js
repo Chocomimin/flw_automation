@@ -7,7 +7,7 @@ const capabilities = {
     'appium:appPackage': 'org.piramalswasthya.sakhi.saksham.uat',
     'appium:appActivity': 'org.piramalswasthya.sakhi.ui.login_activity.LoginActivity',
     'appium:noReset': true,
-    'appium:enforceXPath1': true   // ✅ FIX 2: Enable XPath1
+    'appium:enforceXPath1': true
 };
 
 const wdioOptions = {
@@ -19,17 +19,17 @@ const wdioOptions = {
 };
 
 const formData = {
-    rchId: '118013303339',
-    lmpDate: '01-01-2026',
-    nayiPahalKit: 'No',
-    noOfDeliveriesMoreThan3: 'No',
+    rchId: '919751675533', // Kavita's Beneficiary ID
+    lmpDate: '15-01-2026', // A realistic recent LMP date
+    nayiPahalKit: 'Yes',
+    noOfDeliveriesMoreThan3: 'No', // At 22, this is likely a 1st or 2nd pregnancy
     timeFromLastDeliveryLess18: 'No',
     heightShortLess140: 'No',
-    ageLess18OrMore35: 'No',
+    ageLess18OrMore35: 'No', // She is exactly 22, so this is 'No'
     miscarriageAbortion: 'No',
     homeDelivery: 'No',
     medicalIssuesDuringPregnancy: 'No',
-    pastCSection: 'No',   // ✅ Add this
+    pastCSection: 'No',
 };
 
 async function clickEligibleCoupleList(driver) {
@@ -54,20 +54,62 @@ async function clickEligibleCoupleRegistration(driver) {
 
 async function scrollToNameAndClickCard(driver, name) {
     console.log(`\n🔄 Scrolling to find "${name}"...`);
+    let found = false;
+
+    // 1. First attempt: Scroll to find the name
     try {
         await driver.$(
             `android=new UiScrollable(new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/rv_any"))` +
-            `.setMaxSearchSwipes(50).scrollIntoView(new UiSelector().textContains("${name}"))`
+            `.setMaxSearchSwipes(15).scrollIntoView(new UiSelector().textContains("${name}"))`
         );
     } catch {
-        await driver.$(
-            `android=new UiScrollable(new UiSelector().scrollable(true))` +
-            `.setMaxSearchSwipes(50).scrollIntoView(new UiSelector().textContains("${name}"))`
-        );
+        try {
+            await driver.$(
+                `android=new UiScrollable(new UiSelector().scrollable(true))` +
+                `.setMaxSearchSwipes(15).scrollIntoView(new UiSelector().textContains("${name}"))`
+            );
+        } catch {}
     }
 
     await driver.pause(1000);
     const nameEl = await driver.$(`android=new UiSelector().textContains("${name}")`);
+
+    try {
+        found = await nameEl.isDisplayed();
+    } catch (e) {
+        found = false;
+    }
+
+    // 2. Fallback: If scrolling failed, use the Search Bar & Button
+    if (!found) {
+        console.log(`⚠️ "${name}" not found via scrolling. Falling back to search bar...`);
+
+        try {
+            const searchInput = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/searchView")');
+            await searchInput.waitForDisplayed({ timeout: 5000 });
+            await searchInput.click();
+            await searchInput.clearValue();
+
+            // Type just the first part of the name to be safe
+            const firstName = name.split(" ")[0];
+            await searchInput.setValue(firstName);
+
+            if (await driver.isKeyboardShown()) {
+                await driver.hideKeyboard();
+            }
+
+            // Click the search/microphone icon next to the text box
+            console.log(`👆 Clicking search icon for "${firstName}"...`);
+            const searchBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/ib_search")');
+            await searchBtn.click();
+
+            await driver.pause(3000); // Give the list time to filter
+        } catch (searchErr) {
+            console.log("❌ Search bar fallback failed:", searchErr.message);
+        }
+    }
+
+    // 3. Ensure the element is now visible and click it
     await nameEl.waitForDisplayed({ timeout: 10000 });
     console.log(`✅ "${name}" visible — clicking...`);
 
@@ -104,14 +146,14 @@ async function scrollToNameAndClickCard(driver, name) {
 async function scrollFormToTop(driver) {
     console.log("⬆️ Scrolling form to top...");
     try {
-        // scrollToBeginning is most reliable
+
         await driver.$(
             `android=new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true))` +
             `.scrollToBeginning(10)`
         );
         console.log("✅ Scrolled to top via scrollToBeginning");
     } catch {
-        // Fallback: swipe up gestures
+
         for (let i = 0; i < 8; i++) {
             await driver.execute('mobile: scrollGesture', {
                 left: 540, top: 800, width: 400, height: 800,
@@ -125,14 +167,14 @@ async function scrollFormToTop(driver) {
     await driver.pause(1000);
 }
 
-// ✅ FIX 1: Use XPath with @hint instead of UiSelector().hint()
+
 async function fillFieldByHint(driver, hint, value) {
     console.log(`✏️  Filling "${hint}" with "${value}"`);
     try {
-        // Scroll using XPath to find the field
+
         const field = await driver.$(`//android.widget.EditText[@hint="${hint}"]`);
 
-        // Scroll to it using gesture if needed
+
         await driver.execute('mobile: scrollGesture', {
             left: 540, top: 1200, width: 400, height: 800,
             direction: 'up',
@@ -163,7 +205,7 @@ async function fillFieldByHint(driver, hint, value) {
 async function fillDateField(driver, hint, dateValue) {
     console.log(`📅 Filling date "${hint}" with "${dateValue}"`);
     try {
-        // ✅ FIX 1: Use XPath @hint instead of UiSelector().hint()
+
         const field = await driver.$(`//android.widget.EditText[@hint="${hint}"]`);
         await field.waitForDisplayed({ timeout: 8000 });
         await field.click();
@@ -175,7 +217,7 @@ async function fillDateField(driver, hint, dateValue) {
         if (okVisible) {
             const [day, month, year] = dateValue.split('-');
             try {
-                // Try keyboard icon to switch to text input mode in date picker
+
                 const keyboardIcon = await driver.$('//android.widget.ImageButton[@content-desc="Switch to text input mode"]');
                 const iconVisible = await keyboardIcon.isDisplayed().catch(() => false);
                 if (iconVisible) {
@@ -208,11 +250,11 @@ async function fillDateField(driver, hint, dateValue) {
     }
 }
 
-// ✅ FIX 2: enforceXPath1 in caps fixes the ArrayList cast error
+
 async function selectRadioByLabel(driver, questionText, answer) {
     console.log(`🔘 "${questionText}" → "${answer}"`);
     try {
-        // Scroll to question using UiScrollable text search
+
         await driver.$(
             `android=new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true))` +
             `.scrollIntoView(new UiSelector().textContains("${questionText.substring(0, 20)}"))`
@@ -220,7 +262,7 @@ async function selectRadioByLabel(driver, questionText, answer) {
 
         await driver.pause(500);
 
-        // XPath1 compatible — find RadioButton after the question TextView
+
         const radioBtn = await driver.$(
             `//android.widget.TextView[contains(@text,"${questionText}")]` +
             `/following::android.widget.RadioButton[@text="${answer}"][1]`
@@ -283,7 +325,7 @@ async function main() {
 
         await clickEligibleCoupleList(driver);
         await clickEligibleCoupleRegistration(driver);
-        await scrollToNameAndClickCard(driver, "SUMI KALANDI");
+        await scrollToNameAndClickCard(driver, "KAVTA VERMA");
         await fillRegistrationForm(driver, formData);
         await driver.pause(3000);
         await submitForm(driver);
