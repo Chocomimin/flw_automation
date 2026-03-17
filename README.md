@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📱 FLW Application – Appium Automation Framework
+# 📱 FLW (Front Line Worker) – Appium Automation Framework
 
 ### Enterprise-Grade Mobile Test Automation for Android Field Worker Applications
 
@@ -426,9 +426,59 @@ npx wdio run wdio.conf.js
 # Run a specific spec file
 npx wdio run wdio.conf.js --spec ./steps/loginSteps.js
 ```
+---
+
+## ⚠️ Automation Limitations & Workarounds
+
+During automation of the **FLW (Front Line Worker) Android Application**, the following practical limitations were encountered and handled with specific workarounds.
+
+### 1️⃣ Emulator Compatibility Issue
+
+The FLW application was **not fully supported on Android emulators** during testing.
+
+Because of this limitation, the automation execution was performed using a **real Android device** connected to the system.
+
+To monitor the automation execution, the **mobile device screen was cloned (mirrored) to the laptop**, while Appium controlled the device through **ADB (Android Debug Bridge)**.
+
+This ensured stable automation execution even though the emulator environment was unavailable.
 
 ---
 
+### 2️⃣ Dropdown Options Without Test IDs
+
+Some dropdown fields in the application **do not contain unique identifiers** such as:
+
+- `resource-id`
+- `content-desc`
+- `accessibility id`
+- `test-id`
+
+Because of this, the automation framework could not locate these elements using standard selectors.
+
+To solve this issue, **coordinate-based tapping** was used to select dropdown options.
+
+Example:
+
+```javascript
+await driver.touchAction({
+  action: 'tap',
+  x: 540,
+  y: 1240
+});
+```
+---
+### 3️⃣ Limitation of Coordinate-Based Automation
+
+Coordinate-based interaction depends on **screen resolution and device size**.
+
+Therefore:
+
+- Coordinates may change if the **mobile device changes**
+- Different screen sizes may require **adjusting the tap positions**
+- Tests may not work on different devices without **updating the coordinates**
+
+For this project, automation was executed using the **same device configuration used during development** to maintain consistency.
+---
 ## 📋 Automated Workflows
 
 ### 1. 🔐 Login & Language Selection
