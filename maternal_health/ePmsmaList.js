@@ -36,40 +36,55 @@ async function clickDashboardCard(driver, cardText) {
 }
 
 /**
- * Searches for a beneficiary and clicks the PMSMA button on their specific card.
+ * Searches for a partial name, scrolls through the results, and clicks PMSMA for a specific user.
  * @param {WebdriverIO.Browser} driver
- * @param {string} searchName - The name of the beneficiary to search for.
+ * @param {string} searchTerm - The short name to type in the search bar (e.g., 'Baby').
+ * @param {string} targetFullName - The exact full name to scroll to and find (e.g., 'Baby Begum').
  */
-async function searchAndClickPMSMA(driver, searchName) {
+async function searchAndClickPMSMA(driver, searchTerm, targetFullName) {
     try {
         console.log(`Waiting for the search bar to load...`);
 
-        // Locate the search bar
+        // 1. Locate and fill the search bar
         const searchBar = await driver.$('//android.widget.EditText[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/searchView"]');
         await searchBar.waitForDisplayed({ timeout: 10000 });
 
-        // Click the search bar to bring up the keyboard
-        await searchBar.click();
-        await driver.pause(1000);
+        console.log(`⌨️ Typing "${searchTerm}" into the search bar...`);
+        await searchBar.setValue(searchTerm);
 
-        console.log(`⌨️ Typing "${searchName}" into the search bar...`);
+        // Hide the keyboard so it doesn't block our view while scrolling
+        if (await driver.isKeyboardShown()) {
+            await driver.hideKeyboard();
+        }
+        await driver.pause(2000); // Wait for the list to filter
 
-        // Type the name
-        await driver.keys([...searchName]);
-        await driver.pause(2000); // Give the list a moment to filter results
+        console.log(`↕️ Scrolling list to find exact match: "${targetFullName}"...`);
 
-        // Find the specific PMSMA button that belongs to the card of the searched user
-        const specificPmsmaButtonXPath = `//android.widget.TextView[@text="${searchName}"]/ancestor::android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/cv_content"]//android.widget.Button[@text="PMSMA"]`;
+        // 2. Use Android's native UiScrollable to scroll until the target full name is in view
+        // It looks for a scrollable container and scrolls until it finds text matching your target.
+        const scrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("${targetFullName}"))`;
+
+        try {
+            await driver.$(`android=${scrollSelector}`);
+            // Small pause after scrolling to let the UI settle
+            await driver.pause(1000);
+        } catch (scrollError) {
+            console.log(`⚠️ Note: Could not perform scroll. The target might already be visible or doesn't exist. Continuing...`);
+        }
+
+        // 3. Find the specific PMSMA button that belongs to the card of the targetFullName
+        const specificPmsmaButtonXPath = `//android.widget.TextView[contains(@text, "${targetFullName}")]/ancestor::android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/cv_content"]//android.widget.Button[@text="PMSMA"]`;
+
         const pmsmaButton = await driver.$(specificPmsmaButtonXPath);
 
         // Wait for the button and click it
         await pmsmaButton.waitForDisplayed({ timeout: 10000 });
         await pmsmaButton.click();
 
-        console.log(`✅ Successfully clicked "PMSMA" for ${searchName}.`);
+        console.log(`✅ Successfully clicked "PMSMA" for ${targetFullName}.`);
 
     } catch (error) {
-        console.error(`❌ Failed during search or click process. Error: ${error.message}`);
+        console.error(`❌ Failed during search, scroll, or click process. Error: ${error.message}`);
         throw error;
     }
 }
@@ -94,7 +109,7 @@ async function runEPmsmaTest() {
         await driver.pause(3000);
 
         // 2. Search for the patient and click PMSMA
-        await searchAndClickPMSMA(driver, 'PRIYA PATHAK');
+        await searchAndClickPMSMA(driver, 'RTRT', 'RTRT YES');
 
         // Allow the form screen to load
         await driver.pause(3000);
