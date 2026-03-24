@@ -84,7 +84,7 @@ async function pickDateFromCalendar(driver, dateObj) {
     await (await driver.$('android=new UiSelector().resourceId("android:id/datePicker")')).waitForDisplayed({ timeout: 5000 });
 
     await navigateToMonth(driver, month, year);
-
+  
     const formattedDay = String(day);
     const dayToClick = await driver.$(`android=new UiSelector().text("${formattedDay}").clickable(true)`);
     await dayToClick.click();
@@ -425,6 +425,22 @@ async function fillUmbilicalStump(driver, expectedOption) {
         }
     }
 }
+
+async function clickSubmit(driver) {
+    console.log('Processing Submit button...');
+
+    // Using both resource-id and text for a robust locator
+    const submitBtnXPath = `//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btnSave" and @text="Submit"]`;
+    const submitBtn = await driver.$(submitBtnXPath);
+
+    try {
+        await submitBtn.waitForDisplayed({ timeout: 5000 });
+        await submitBtn.click();
+        console.log('✔ Successfully clicked the "Submit" button.');
+    } catch (error) {
+        console.error('❌ Could not find or click the "Submit" button. It might be hidden or disabled.');
+    }
+}
 async function runTest() {
     let driver;
     try {
@@ -465,6 +481,8 @@ async function runTest() {
         await fillUmbilicalStump(driver, "Falling Off");
         await driver.pause(1000);
         await selectRadioOption(driver, "Is Baby discharge from SNCU?", "No");
+        await driver.pause(1000);
+        await clickSubmit(driver);
     } catch (error) {
         console.error('Error during test execution:', error);
     } finally {
