@@ -157,33 +157,85 @@ Test Entry Point
 MithaaniAppium/
 │
 ├── 📄 mainTest.js                    # Main entry point – orchestrates full E2E flow
-├── 📄 memberAdding.js                # Member addition workflow runner
-├── 📄 familyMemberWomenSteps.js      # Women-specific family member steps
-├── 📄 searchRahul.js                 # Search and lookup utility script
+├── 📄 test.js                        # Sandbox/utility test script
+├── 📄 service-account.json           # Credentials/service account configuration
+├── 📄 package.json                   # Node.js dependencies & scripts
+├── 📄 package-lock.json              # Locked dependency tree
+├── 📄 .gitignore                     # Git ignored files and directories
+└── 📄 README.md                      # Project documentation
 │
-├── 📂 all_beneficiaries/
-│   └── 📄 beneficiaries.js           # Beneficiary listing and management automation
+├── 📂 all_beneficiaries/             # Beneficiary listing and management
+│   └── 📄 beneficiaries.js           # Automation for listing all registered beneficiaries
 │
-├── 📂 eligible_couple_list/
+├── 📂 Child_care/                    # Newborn, child, and adolescent tracking workflows
+│   ├── 📄 ChildList.js               # General child list automation
+│   ├── 📄 children_list.js           # Children list filtering and tracking
+│   ├── 📄 fillCheckSamForm.js        # SAM (Severe Acute Malnutrition) checking form
+│   ├── 📄 ifa_form.js                # IFA supplement form for children
+│   ├── 📄 new_born_list.js           # Newborn tracking and registration list
+│   ├── 📄 ors_form.js                # ORS distribution tracking form
+│   └── 📄 test_adolescent_register.js# Adolescent health tracking register
+│
+├── 📂 communicable_Diseases/         # Communicable disease screening and tracking
+│   ├── 📄 confirmed_tb_cases.js      # Confirmed TB patient lists
+│   ├── 📄 suspected_TB_cases.js      # Suspected TB patient lists
+│   └── 📄 tbScreening.js             # TB screening workflow automation
+│
+├── 📂 Disease_control/               # End-to-end disease control tracking modules
+│   ├── 📄 Filaria.js                 # Filaria disease tracking
+│   ├── 📄 aes_je.js                  # AES/JE case tracking
+│   ├── 📄 kala_azar.js               # Kala Azar case tracking
+│   ├── 📂 leprosy/
+│   │   ├── 📄 Leprosy_Confirmed.js   # Confirmed leprosy patient management
+│   │   ├── 📄 Leprosy_Suspected.js   # Suspected leprosy patient management
+│   │   └── 📄 leprosy_screening.js   # Leprosy screening workflows
+│   ├── 📂 malaria/
+│   │   ├── 📄 malaria.js             # Malaria screening and general tracking
+│   │   └── 📄 malaria_confirmed_cases.js # Confirmed malaria case tracking
+│   └── 📂 NCD/                       # Non-Communicable Diseases workflows
+│       ├── 📄 NCD_Eligible_List.js   # List of eligible NCD patients
+│       ├── 📄 NCD_Priority_List.js   # High-priority NCD patient tracking
+│       └── 📄 NCD_Referred_List.js   # Referred NCD patient tracking
+│
+├── 📂 eligible_couple_list/          # Family planning and couple tracking
 │   ├── 📄 couple_list.js             # Eligible couple listing automation
 │   └── 📄 couple_tracking.js         # Couple follow-up tracking workflows
 │
-├── 📂 maternal_health/
-│   ├── 📄 maternalHealthSteps.js     # Maternal health dashboard navigation
-│   ├── 📄 pregnancyRegistrationForm.js # Pregnancy registration form automation
-│   ├── 📄 Anc_visits.js              # Antenatal care visit automation
-│   └── 📄 Pnc_list.js                # Postnatal care mother list automation
+├── 📂 High_Risk_Assessment/          # High-risk patient identification and follow-ups
+│   ├── 📄 Assess_High_Risk.js        # General high-risk assessment
+│   ├── 📄 assessHighRiskPW.js        # High-risk assessment specifically for Pregnant Women
+│   ├── 📄 followUpHighRiskCases.js   # General follow-up for identified high-risk cases
+│   └── 📄 follow_up_hrp.js           # High-Risk Pregnancy (HRP) specific follow-up forms
 │
-├── 📂 steps/
-│   ├── 📄 loginSteps.js              # Login & language selection steps
-│   ├── 📄 villageSteps.js            # Village selection and navigation steps
-│   ├── 📄 householdSteps.js          # Household search and selection steps
-│   ├── 📄 householdFormSteps.js      # Household registration form steps
-│   └── 📄 headOfFamilySteps.js       # Head of family data entry steps
+├── 📂 household_add_member/          # Household and family member registration
+│   ├── 📄 addMember.js               # Automation for adding individual family members
+│   └── 📄 familyForm.js              # Comprehensive family registration form
 │
-├── 📄 package.json                   # Node.js dependencies & scripts
-├── 📄 wdio.conf.js                   # WebdriverIO configuration
-└── 📄 README.md                      # Project documentation
+├── 📂 maternal_health/               # Comprehensive maternal health workflows
+│   ├── 📄 Abortion_List.js           # List of abortion cases
+│   ├── 📄 Abortion_form.js           # Abortion tracking and registration form
+│   ├── 📄 Anc_visits.js              # General Antenatal Care (ANC) visits
+│   ├── 📄 ancVisitForm.js            # Specific ANC form filling automation
+│   ├── 📄 childRegistration.js       # Child registration related to maternal delivery
+│   ├── 📄 deliveryRegistration.js    # Delivery process and registration automation
+│   ├── 📄 DeliveryOutcome.js         # Post-delivery outcome recording
+│   ├── 📄 ePmsmaList.js              # e-PMSMA (Pradhan Mantri Surakshit Matritva Abhiyan) list
+│   ├── 📄 maternalHealthSteps.js     # Navigational steps for maternal health dashboard
+│   ├── 📄 Mdsr.js                    # MDSR (Maternal Death Surveillance and Response)
+│   ├── 📄 newBorn.js                 # Newborn linkage in maternal health
+│   ├── 📄 pmsmaForm.js               # PMSMA specific form automation
+│   ├── 📄 Pnc_list.js                # Postnatal Care (PNC) mother list automation
+│   └── 📄 pregnancyRegistrationForm.js # Complete pregnancy registration automation
+│
+├── 📂 Routine_Immunization/          # Immunization tracking modules
+│   └── 📄 Routine_Immunization.js    # Routine vaccination tracking and scheduling
+│
+└── 📂 steps/                         # Reusable core framework actions and utilities
+    ├── 📄 loginSteps.js              # Login & language selection steps
+    ├── 📄 villageSteps.js            # Village selection and navigation steps
+    ├── 📄 householdSteps.js          # Household search and selection steps
+    ├── 📄 householdFormSteps.js      # Household registration form steps
+    └── 📄 headOfFamilySteps.js       # Head of family data entry steps
 ```
 
 ---
@@ -416,7 +468,62 @@ node maternal_health/Anc_visits.js
 ```bash
 node maternal_health/Pnc_list.js
 ```
+#### Run Newborn & Child Registration
+```bash
+node maternal_health/newBorn.js
+node maternal_health/childRegistration.js
+```
+#### Run Abortion List
 
+```bash
+maternal_health\Abortion_List.js
+```
+#### e-Plasma
+```bash
+node maternal_health\ePmsmaList.js
+```
+#### Run Child Care
+```bash
+Child_care\new_born_list.js
+Child_care\ChildList.js
+Child_care\test_adolescent_register.js
+Child_care\children_list.js
+```
+#### run disease control
+```bash
+Disease_control\Filaria.js
+Disease_control\Filaria.js
+Disease_control\aes_je.js
+Disease_control\malaria\malaria_confirmed_cases.js
+Disease_control\malaria\malaria.js
+Disease_control\NCD\NCD_Eligible_List.js
+Disease_control\NCD\NCD_Priority_List.js
+Disease_control\NCD\NCD_Referred_List.js
+Disease_control\leprosy\Leprosy_Confirmed.js
+Disease_control\leprosy\leprosy_screening.js
+Disease_control\leprosy\Leprosy_Suspected.js
+Disease_control\NCD\NCD_Eligible_List.js
+Disease_control\NCD\NCD_Priority_List.js
+Disease_control\NCD\NCD_Referred_List.js
+```
+#### Run Communicable disease
+```
+communicable_Diseases\confirmed_tb_cases.js
+communicable_Diseases\suspected_TB_cases.js
+communicable_Diseases\tbScreening.js
+```
+#### Run routine immunization
+```
+Routine_Immunization\Routine_Immunization.js
+```
+#### Run high risk assessment
+```
+High_Risk_Assessment\Assess_High_Risk.js
+High_Risk_Assessment\assessHighRiskPW.js
+High_Risk_Assessment\follow_up_hrp.js
+High_Risk_Assessment\followUpHighRiskCases.js
+```
+node 
 #### Run via WebdriverIO Test Runner
 
 ```bash
@@ -606,6 +713,7 @@ Automates the Postnatal Care list:
 - Navigates to PNC Mother List
 - Views postnatal care beneficiaries
 - Records PNC check-up details and outcomes
+
 
 ---
 
