@@ -389,31 +389,31 @@ async function selectToiletAvailability(driver, value = "Flush toilet with runni
 
 // Master function to fill the first form and trigger the transition
 async function fillHouseholdFormWithExamples(driver) {
-    console.log("📝 Filling household form with NEW example data...");
+    console.log("📝 Filling household form with updated example data...");
 
-    await fillFirstName(driver, "Kavita");
-    await fillLastName(driver, "Verma");
-    await fillMobileNumber(driver, "9123456789");
-    await fillHouseNo(driver, "108");
-    await fillWardNo(driver, "5");
-    await fillWardName(driver, "Sunrise Valley");
-    await fillMohallaName(driver, "Old Bazar");
+    await fillFirstName(driver, "Anita");
+    await fillLastName(driver, "Desai");
+    await fillMobileNumber(driver, "9876543210");
+    await fillHouseNo(driver, "215");
+    await fillWardNo(driver, "7");
+    await fillWardName(driver, "Green Meadows");
+    await fillMohallaName(driver, "Nazar Colony");
 
-    await selectEconomicStatus(driver, "BPL");
+    await selectEconomicStatus(driver, "APL");
 
-    const residentialArea = "Urban"; // Switched to Urban
+    const residentialArea = "Rural"; // Updated example selection
     await selectResidentialArea(driver, residentialArea);
 
     // Pass a flag depending on whether "Other" was selected for Residential Area
     const isOtherResidentialOpen = (residentialArea === "Other");
-    await selectTypeOfHouse(driver, "Pucca", isOtherResidentialOpen); // Switched to Pucca
+    await selectTypeOfHouse(driver, "Kuchha", isOtherResidentialOpen); // Updated to Kuchha
 
-    await selectHouseOwnership(driver, "No"); // Switched to No
-    await selectSeparateKitchen(driver, "No"); // Switched to No
-    await selectTypeOfFuel(driver, "LPG"); // Switched to LPG
-    await selectPrimaryWaterSource(driver, "Tap Water"); // Switched to Tap Water
-    await selectElectricityAvailability(driver, "Electricity Supply");
-    await selectToiletAvailability(driver, "Flush toilet with running water");
+    await selectHouseOwnership(driver, "Yes");
+    await selectSeparateKitchen(driver, "Yes");
+    await selectTypeOfFuel(driver, "Kerosene");
+    await selectPrimaryWaterSource(driver, "Well");
+    await selectElectricityAvailability(driver, "Generator");
+    await selectToiletAvailability(driver, "Pit toilet without water");
 
     if (await driver.isKeyboardShown()) {
         await driver.hideKeyboard();

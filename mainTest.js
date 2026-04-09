@@ -22,7 +22,7 @@ async function main() {
       platformName: "Android",
       "appium:deviceName": "ZD222X4TDK",
       "appium:automationName": "UiAutomator2",
-      "appium:appPackage": "org.piramalswasthya.sakhi.saksham.uat", 
+      "appium:appPackage": "org.piramalswasthya.sakhi.saksham.uat",
       "appium:appActivity": "org.piramalswasthya.sakhi.ui.login_activity.LoginActivity",
       "appium:noReset": false,
       "appium:autoGrantPermissions": true,
@@ -35,33 +35,33 @@ async function main() {
   console.log("✅ App launched successfully!");
 
   try {
-    
+   
     await selectEnglish(driver);
-    await login(driver, "Amina", "Test@123");
-    await driver.pause(5000); 
+    await login(driver, "Anima", "Test@123");
+    await driver.pause(5000);
 
-    
+   
     console.log("debug: selectVillage typeof=", typeof selectVillage);
     if (typeof selectVillage !== "function") {
       console.error("debug: villageSteps exports=", require("./steps/villageSteps"));
       throw new Error("selectVillage is not available from steps/villageSteps");
     }
 
-    await selectVillage(driver, "Dakhinhengra TE");
+    await selectVillage(driver, "Borjan TE");
     await driver.pause(1000);
-    
+   
     await clickAllHousehold(driver);
     await clickNewHouseholdRegistration(driver);
     await acceptConsent(driver);
 
-    
+   
     console.log("🚀 Starting to fill the first form (Household)...");
     await fillHouseholdFormWithExamples(driver);
 
-    
+   
     await driver.pause(3000);
 
-    
+   
     console.log("🚀 Starting to fill the second form (Head of Family)...");
     await fillHeadOfFamilyFormWithExamples(driver);
 
@@ -69,7 +69,7 @@ async function main() {
 
   } catch (error) {
     console.error("❌ Test failed:", error);
-    
+   
     try {
       const screenshot = await driver.takeScreenshot();
       const fs = require('fs');
@@ -80,7 +80,7 @@ async function main() {
     }
   } finally {
     await driver.pause(5000);
-    
+   
   }
 }
 

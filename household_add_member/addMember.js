@@ -180,7 +180,7 @@ async function runTest() {
         console.log("🚀 App launched. Attempting to click All Household...");
 
         await clickDashboardCard(driver, 'All\nHousehold');
-        await searchAndAddMember(driver, 'kavita verma');
+        await searchAndAddMember(driver, 'Anita Desai');
 
         await driver.pause(2000);
 

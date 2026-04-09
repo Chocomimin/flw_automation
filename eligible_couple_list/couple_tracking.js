@@ -32,14 +32,14 @@ const wdioOptions = {
 };
 
 const PACKAGE = 'org.piramalswasthya.sakhi.saksham.uat';
-const BENEFICIARY_NAME = 'SUMI KALANDI';
+const BENEFICIARY_NAME = 'Anita Desai';
 
 const FORM_DATA = {
     dateOfVisit:               { day: 6, month: 3, year: 2026 },
     lmpDate:                   { day: 1, month: 1, year: 2026 },
     isPregnancyTestDone:       'Yes',
     pregnancyTestResult:       'Positive',
-    isWomanPregnant:           'No',
+    isWomanPregnant:           'Yes',
     usingFamilyPlanningMethod: 'No'
 };
 

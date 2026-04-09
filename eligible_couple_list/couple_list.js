@@ -22,6 +22,7 @@ const formData = {
     rchId: '919751675533', // Kavita's Beneficiary ID
     lmpDate: '15-01-2026', // A realistic recent LMP date
     nayiPahalKit: 'Yes',
+    nayiPahalKitHandoverDate: '08-04-2026', // Date when Nayi Pahal kit was handed over
     noOfDeliveriesMoreThan3: 'No', // At 22, this is likely a 1st or 2nd pregnancy
     timeFromLastDeliveryLess18: 'No',
     heightShortLess140: 'No',
@@ -187,11 +188,7 @@ async function fillFieldByHint(driver, hint, value) {
         await field.clearValue();
         await driver.pause(200);
 
-        const adbText = value.toString().replace(/ /g, '%s');
-        await driver.execute('mobile: shell', {
-            command: 'input',
-            args: ['text', adbText]
-        });
+        await field.setValue(value);
 
         await driver.pause(500);
         await driver.execute('mobile: hideKeyboard').catch(() => {});
@@ -251,7 +248,42 @@ async function fillDateField(driver, hint, dateValue) {
 }
 
 
-async function selectRadioByLabel(driver, questionText, answer) {
+async function handleNayiPahalKitPopup(driver, dateValue) {
+    console.log("⏳ Checking for Nayi Pahal Kit date picker popup...");
+    try {
+        const datePicker = await driver.$('android=new UiSelector().resourceId("android:id/datePicker")');
+        const pickerVisible = await datePicker.isDisplayed().catch(() => false);
+
+        if (pickerVisible && dateValue) {
+            // Date picker is displayed, set the date
+            const [day, month, year] = dateValue.split('-');
+
+            // Try to use the text input mode
+            try {
+                const dateInput = await driver.$('android=new UiSelector().className("android.widget.EditText")');
+                const inputVisible = await dateInput.isDisplayed().catch(() => false);
+                if (inputVisible) {
+                    await dateInput.clearValue();
+                    await dateInput.setValue(`${month}/${day}/${year}`);
+                    await driver.pause(500);
+                }
+            } catch {}
+
+            console.log("📅 Date set in picker for Nayi Pahal Kit handover");
+        }
+
+        // Click OK button to confirm
+        const okBtn = await driver.$('android=new UiSelector().resourceId("android:id/button1").text("OK")');
+        await okBtn.waitForDisplayed({ timeout: 5000 });
+        await okBtn.click();
+        console.log("✅ Clicked OK on Nayi Pahal Kit popup");
+        await driver.pause(1000);
+    } catch (e) {
+        console.log("ℹ️ No Nayi Pahal Kit popup appeared or it was already dismissed:", e.message);
+    }
+}
+
+async function selectRadioByLabel(driver, questionText, answer, dateValue = null) {
     console.log(`🔘 "${questionText}" → "${answer}"`);
     try {
 
@@ -271,6 +303,11 @@ async function selectRadioByLabel(driver, questionText, answer) {
         await radioBtn.click();
         await driver.pause(400);
         console.log(`✅ Selected "${answer}" for "${questionText}"`);
+
+        // Handle Nayi Pahal Kit popup if "Yes" was selected
+        if (questionText.includes("Nayi Pahal kit") && answer === "Yes") {
+            await handleNayiPahalKitPopup(driver, dateValue);
+        }
     } catch (e) {
         console.log(`⚠️ Could not select radio for "${questionText}": ${e.message}`);
     }
@@ -284,7 +321,12 @@ async function fillRegistrationForm(driver, data) {
     await fillFieldByHint(driver, 'RCH ID No. of Woman', data.rchId);
     await fillDateField(driver, 'LMP Date *', data.lmpDate);
 
-    await selectRadioByLabel(driver, 'Is Nayi Pahal kit handed over to couple?', data.nayiPahalKit);
+    await selectRadioByLabel(driver, 'Is Nayi Pahal kit handed over to couple?', data.nayiPahalKit, data.nayiPahalKitHandoverDate);
+
+    // If Nayi Pahal kit was handed over, fill the handover date field
+    if (data.nayiPahalKit === 'Yes' && data.nayiPahalKitHandoverDate) {
+        await fillDateField(driver, 'Nayi Pahal kit handover Date *', data.nayiPahalKitHandoverDate);
+    }
     await selectRadioByLabel(driver, 'No. of Deliveries is more than 3', data.noOfDeliveriesMoreThan3);
     await selectRadioByLabel(driver, 'Time from last delivery is less than 18 months', data.timeFromLastDeliveryLess18);
     await selectRadioByLabel(driver, 'Height is very short or less than 140 cms', data.heightShortLess140);
@@ -325,7 +367,7 @@ async function main() {
 
         await clickEligibleCoupleList(driver);
         await clickEligibleCoupleRegistration(driver);
-        await scrollToNameAndClickCard(driver, "KAVTA VERMA");
+        await scrollToNameAndClickCard(driver, "ANITA DESAI");
         await fillRegistrationForm(driver, formData);
         await driver.pause(3000);
         await submitForm(driver);

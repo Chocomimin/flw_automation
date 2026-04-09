@@ -1,11 +1,11 @@
 // ─── Registration Data ────────────────────────────────────────────────────────
 
 const REG_DATA = {
-    dateOfRegistration: { day: 10, month: 3, year: 2026 },
-    dateOfBirth: { day: 15, month: 6, year: 1995 },
-    age: "30",
-    fathersName: "RAM SHARMA",
-    mothersName: "SITA SHARMA"
+    dateOfRegistration: { day: 22, month: 2, year: 2026 },
+    dateOfBirth: { day: 8, month: 11, year: 1998 },
+    age: "27",
+    fathersName: "VIKRAM PATEL",
+    mothersName: "NEHA PATEL"
 };
 
 const MONTH_NAMES = [

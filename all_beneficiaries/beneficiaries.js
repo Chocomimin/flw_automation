@@ -189,7 +189,7 @@ async function waitForManualOtpAndVerify(driver, otpName = "OTP") {
             }
         );
 
-         
+
         await verifyOtpBtn.click();
         console.log(`✅ Clicked 'Verify OTP' for ${otpName} successfully!`);
 
@@ -225,11 +225,11 @@ async function main() {
         await clickAllBeneficiaries(driver);
         await driver.pause(2000);
 
-        await scrollAndClickAbha(driver, "KAVITA VERMA");
+        await scrollAndClickAbha(driver, "Anita Desai");
         await driver.pause(2000);
 
 
-        await createAbha(driver, "379337136926", "9014984113");
+        await createAbha(driver, "859138096959", "8367670706");
 
 
         await waitForManualOtpAndVerify(driver, "Aadhaar OTP");

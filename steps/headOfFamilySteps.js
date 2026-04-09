@@ -527,24 +527,24 @@ async function selectStatusOfWomen(driver, value = "Eligible Couple") {
 
 // ✅ 9. Master Function
 async function fillHeadOfFamilyFormWithExamples(driver, targetMaritalStatus = "Married") {
-    console.log("📝 Filling Head of Family form with example data...");
+    console.log("📝 Filling Head of Family form with updated example data...");
 
     await handleConsentForm(driver);
-    await fillAgeAndDOB(driver, "26");
+    await fillAgeAndDOB(driver, "30");
     await selectGender(driver, "Female");
     await selectMaritalStatus(driver, targetMaritalStatus);
 
-    await fillFatherName(driver, "Ram Sharma");
-    await fillMotherName(driver, "Sunita Sharma");
+    await fillFatherName(driver, "Sandeep Singh");
+    await fillMotherName(driver, "Rekha Singh");
 
     // Dynamic Fields
-    await fillSpouseNameIfExists(driver, "Priya Sharma");
-    await fillAgeAtMarriageIfExists(driver, "22");
-    await selectHaveChildrenIfExists(driver, "Yes"); // 🆕 Added step here
+    await fillSpouseNameIfExists(driver, "Pooja Singh");
+    await fillAgeAtMarriageIfExists(driver, "24");
+    await selectHaveChildrenIfExists(driver, "No"); // 🆕 Added step here
 
-    await selectCommunity(driver, "General");
-    await selectReligion(driver, "Hindu");
-    await selectStatusOfWomen(driver, "Eligible Couple");
+    await selectCommunity(driver, "OBC");
+    await selectReligion(driver, "Christian");
+    await selectStatusOfWomen(driver, "Pregnant Woman");
     console.log("✅ Head of Family form filled successfully!");
     await submitFinalForm(driver);
 }
