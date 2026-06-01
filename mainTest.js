@@ -1,5 +1,5 @@
 const { remote } = require("webdriverio");
-const { selectEnglish, login } = require("./steps/loginSteps");
+const { selectLanguage, login } = require("./steps/loginSteps");
 const { selectVillage } = require("./steps/villageSteps");
 const {
   clickAllHousehold,
@@ -35,8 +35,9 @@ async function main() {
   console.log("✅ App launched successfully!");
 
   try {
+    const myPreferredLanguage = "English"; // Change this to test other languages
+    await selectLanguage(driver, myPreferredLanguage);
    
-    await selectEnglish(driver);
     await login(driver, "Anima", "Test@123");
     await driver.pause(5000);
 

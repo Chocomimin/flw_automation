@@ -1,21 +1,31 @@
-const { remote } = require('webdriverio');
+'use strict';
 
+const RID = 'org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown';
+
+const POPUP_ROW_HEIGHT = 102;
+
+// ─────────────────────────────────────────────────────────────
+//  FORM DATA
+// ─────────────────────────────────────────────────────────────
 
 const FORM_DATA = {
-    ancDate: { day: 15, month: 2, year: 2024 },
+    ancDate: { day: 13, month: 5, year: 2026 },
     placeOfAnc: 'CHC',
     ancPeriod: '7',
 
-    
-    maternalDeath: 'Yes',
-    probableCauseOfDeath: 'ECLAMPSIA',
-    placeOfDeath: 'Other Place of Death',
+    abortionIfAny: 'Yes',
+    abortionType: 'Spontaneous',
+    facilityPlaceOfAbortion: 'CHC',
+    abortionDate: { day: 10, month: 2, year: 2026 },
+
+    isWomanAlive: 'No',
+    probableCauseOfDeath: 'Other Maternal Death',
+    placeOfDeath: 'CHC',
     otherPlaceOfDeath: 'On the way to hospital',
-    deathDate: { day: 22, month: 2, year: 2024 },
-    
+    deathDate: { day: 22, month: 2, year: 2026 },
+
     delivered: 'Yes',
 
-    
     weight: '65',
     bp: '120/80',
     hb: '12',
@@ -26,1066 +36,1092 @@ const FORM_DATA = {
     otherHighRisk: 'Patient has a history of severe asthma',
     referralFacility: 'District Hospital',
     hrpConfirmed: 'Yes',
-    identifiedAsHrp: 'ANM'
+    identifiedAsHrp: 'ANM',
+};
+
+const OPTIONS = {
+    placeOfAnc:              ['Sub-Centre', 'VHND/VHSND', 'PHC', 'PMSMA Visit', 'CHC', 'District Hospital', 'Medical College Hospital'],
+    ancPeriod:               ['1', '2', '3', '4', '5', '6', '7', '8', '9'],
+    reasonForDeath:          ['ECLAMPSIA', 'HAEMORRHAGE', 'HIGH FEVER', 'ABORTION', 'Accident', 'Other Maternal Death'],
+    placeOfDeath:            ['Home', 'Subcenter', 'PHC', 'CHC', 'District Hospital', 'Medical College Hospital', 'Private Hospital', 'In Transit', 'Other Place of Death'],
+    abortionType:            ['Induced', 'Spontaneous', 'Incomplete'],
+    facilityPlaceOfAbortion: ['Home', 'Subcenter', 'PHC', 'CHC', 'District Hospital', 'Medical College Hospital', 'Private Hospital', 'In Transit', 'Other Place of Abortion'],
 };
 
 const MONTH_NAMES = [
     '', 'January', 'February', 'March', 'April',
     'May', 'June', 'July', 'August', 'September',
-    'October', 'November', 'December'
+    'October', 'November', 'December',
 ];
 
+// ─────────────────────────────────────────────────────────────
+//  HINT-BASED SPINNER SELECTORS
+//
+//  The RecyclerView is virtualized — instance() counts only the
+//  spinners currently rendered in the viewport, so it breaks
+//  the moment any scrolling happens.
+//
+//  Every spinner has a unique `hint` attribute in the XML.
+//  We locate each by hint — this works regardless of scroll
+//  position, abortion branch, or deceased branch.
+// ─────────────────────────────────────────────────────────────
 
-const CALENDAR = {
-    prevMonthBtn:  { x: 274, y: 924 },
-    nextMonthBtn:  { x: 806, y: 924 },
-    okBtn:         { x: 790, y: 1754 },
-    cancelBtn:     { x: 610, y: 1754 },
-    yearHeader:    { x: 280, y: 670 },
-};
-
-
-const PLACE_OF_ANC_ARROW = { x: 980, y: 580 };
-const PLACE_OF_ANC_COORDS = {
-    'Sub-Centre':               { x: 500, y: 680 },
-    'VHND/VHSND':               { x: 500, y: 780 },
-    'PHC':                      { x: 500, y: 880 },
-    'PMSMA Visit':              { x: 500, y: 980 },
-    'CHC':                      { x: 500, y: 1080 },
-    'District Hospital':        { x: 500, y: 1180 },
-    'Medical College Hospital': { x: 500, y: 1280 }
-};
-
-
-const ANC_PERIOD_ARROW = { x: 980, y: 888 };
-const ANC_PERIOD_COORDS = {
-    '4': { x: 500, y: 888 },
-    '5': { x: 500, y: 1035 },
-    '6': { x: 500, y: 1180 },
-    '7': { x: 500, y: 1325 },
-    '8': { x: 500, y: 1480 },
-    '9': { x: 500, y: 1635 }
-};
-
-
-
-const HIGH_RISK_ARROW = { x: 980, y: 1615 };
-const HIGH_RISK_COORDS = {
-    'NONE': { x: 500, y: 580 },
-    'HIGH BP (SYSTOLIC>=140 AND OR DIASTOLIC >=90mmHg)': { x: 500, y: 700 },
-    'CONVULSIONS': { x: 500, y: 820 },
-    'VAGINAL BLEEDING': { x: 500, y: 940 },
-    'FOUL SMELLING DISCHARGE': { x: 500, y: 1060 },
-    'SEVERE ANAEMIA (HB less than 7 gm/dl)': { x: 500, y: 1180 }, 
-    'DIABETES': { x: 500, y: 1300 },
-    'TWINS': { x: 500, y: 1420 },
-    'OTHER': { x: 500, y: 1540 }
-};
-
-
-
-
-
-const REFERRAL_FACILITY_ARROW = { x: 980, y: 1770 };
-const REFERRAL_FACILITY_COORDS = {
-    'Primary Health Centre':   { x: 500, y: 1350 },
-    'Community Health Centre': { x: 500, y: 1470 },
-    'District Hospital':       { x: 500, y: 1470 },
-    'Other Private Hospital':  { x: 500, y: 1710 }
-};
-
-async function tapAt(driver, x, y) {
-    await driver.performActions([{
-        type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
-        actions: [
-            { type: 'pointerMove', duration: 0, x, y },
-            { type: 'pointerDown', button: 0 },
-            { type: 'pause', duration: 100 },
-            { type: 'pointerUp', button: 0 },
-        ],
-    }]);
-    await driver.releaseActions();
+function spinnerByHint(hintSubstring) {
+    // UiSelector on the Spinner widget itself, matching hint text.
+    return `android=new UiSelector().resourceId("${RID}").descriptionContains("${hintSubstring}")`;
 }
 
-async function swipeHorizontal(driver, direction) {
-    const size = await driver.getWindowRect();
-    const startX = direction === 'left' ? Math.floor(size.width * 0.8) : Math.floor(size.width * 0.2);
-    const endX = direction === 'left' ? Math.floor(size.width * 0.2) : Math.floor(size.width * 0.8);
-    const startY = Math.floor(size.height * 0.5);
+// Spinners use the `hint` attribute in XML but UiAutomator2 exposes
+// the hint as `content-desc` on Spinner when no value is selected,
+// and as the text when a value IS selected.  The most reliable way
+// to find a specific spinner by its label is to search the page
+// source for the hint, then tap its bounds — handled in
+// findSpinnerByHint() below.
 
-    await driver.performActions([{
-        type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
-        actions: [
-            { type: 'pointerMove', duration: 0, x: startX, y: startY },
-            { type: 'pointerDown', button: 0 },
-            { type: 'pause', duration: 100 },
-            { type: 'pointerMove', duration: 500, x: endX, y: startY },
-            { type: 'pointerUp', button: 0 }
-        ]
-    }]);
-    await driver.releaseActions();
-    await driver.pause(1000);
+async function findSpinnerByHint(driver, hintSubstring) {
+    // First try: UiSelector with hint text directly on the Spinner
+    // (works when spinner shows the hint placeholder i.e. no value selected yet)
+    try {
+        const sel = `android=new UiSelector().resourceId("${RID}").textContains("${hintSubstring}")`;
+        const el = await driver.$(sel);
+        if (await el.isExisting() && await el.isDisplayed()) {
+            return el;
+        }
+    } catch (e) { /* continue */ }
+
+    // Second try: parse page source for a Spinner whose hint matches
+    const source = await driver.getPageSource();
+    const escapedHint = hintSubstring.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match Spinner nodes that contain the hint substring
+    const spinnerRegex = new RegExp(
+        `<android\\.widget\\.Spinner[^>]*?hint="[^"]*${escapedHint}[^"]*"[^>]*bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`,
+        'i'
+    );
+    let match = source.match(spinnerRegex);
+
+    // Also try reverse attribute order
+    if (!match) {
+        const spinnerRegex2 = new RegExp(
+            `<android\\.widget\\.Spinner[^>]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"[^>]*?hint="[^"]*${escapedHint}[^"]*"`,
+            'i'
+        );
+        match = source.match(spinnerRegex2);
+    }
+
+    if (match) {
+        const x1 = parseInt(match[1]), y1 = parseInt(match[2]);
+        const x2 = parseInt(match[3]), y2 = parseInt(match[4]);
+        // Return a synthetic object with the same getLocation/getSize interface
+        return {
+            _synthetic: true,
+            _cx: Math.floor((x1 + x2) / 2),
+            _cy: Math.floor((y1 + y2) / 2),
+            _x: x1, _y: y1,
+            _w: x2 - x1, _h: y2 - y1,
+            async getLocation() { return { x: x1, y: y1 }; },
+            async getSize()     { return { width: x2 - x1, height: y2 - y1 }; },
+            async waitForDisplayed() { return true; },
+            async isExisting()  { return true; },
+            async isDisplayed() { return true; },
+        };
+    }
+
+    throw new Error(`❌ Spinner with hint "${hintSubstring}" not found in page source.`);
 }
 
-async function scrollDownToText(driver, text, maxScrolls = 3) {
-    const elementXPath = `//*[contains(@text, "${text}") or contains(@hint, "${text}")]`;
-    for (let i = 0; i < maxScrolls; i++) {
-        try {
-            const element = await driver.$(elementXPath);
-            if ((await element.isExisting()) && (await element.isDisplayed())) {
-                return; 
-            }
-        } catch (e) { } 
 
-        const size = await driver.getWindowRect();
-        const startX = Math.floor(size.width / 2);
-        const startY = Math.floor(size.height * 0.70);
-        const endY = Math.floor(size.height * 0.30);
+// ─────────────────────────────────────────────────────────────
+//  CORE HELPERS
+// ─────────────────────────────────────────────────────────────
 
-        await driver.performActions([{
-            type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
-            actions: [
-                { type: 'pointerMove', duration: 0, x: startX, y: startY },
-                { type: 'pointerDown', button: 0 },
-                { type: 'pause', duration: 100 },
-                { type: 'pointerMove', duration: 600, x: startX, y: endY },
-                { type: 'pointerUp', button: 0 }
-            ]
-        }]);
-        await driver.releaseActions();
-        await driver.pause(1000);
+async function dismissKeyboardIfVisible(driver) {
+    try {
+        const isShown = await driver.isKeyboardShown();
+        if (isShown) {
+            console.log('⌨️  Keyboard visible — dismissing before opening dropdown…');
+            try { await driver.hideKeyboard(); }
+            catch (e) { await driver.pressKeyCode(4); }
+            await driver.pause(800);
+        }
+    } catch (e) {
+        console.log('⚠️  dismissKeyboardIfVisible skipped:', e.message);
     }
 }
 
-async function isEmpty(field, hintText) {
-    try {
-        const text = await field.getText();
-        return !text || text.trim() === '' || text.trim() === hintText.trim();
-    } catch { return true; }
+async function scrollToSpinner(driver, hintSubstring) {
+    // Scroll the form until the spinner with this hint is visible on screen.
+    const xpath = `//*[contains(@hint,"${hintSubstring}") or contains(@text,"${hintSubstring}")]`;
+    for (let i = 0; i < 6; i++) {
+        try {
+            const el = await driver.$(xpath);
+            if (await el.isExisting() && await el.isDisplayed()) {
+                // Check it's not too close to bottom edge
+                const loc = await el.getLocation();
+                const screen = await driver.getWindowRect();
+                if (loc.y < screen.height - 150) return; // visible enough
+            }
+        } catch { /* not yet visible */ }
+        await scrollPage(driver, 'up');
+    }
 }
 
-// ── Calendar Helpers ──────────────────────────────────────────────────────────
+async function tapByCoords(driver, tapX, tapY) {
+    await driver.performActions([{
+        type: 'pointer', id: 'finger1',
+        parameters: { pointerType: 'touch' },
+        actions: [
+            { type: 'pointerMove', duration: 0,   x: tapX, y: tapY },
+            { type: 'pointerDown', button: 0 },
+            { type: 'pause',       duration: 150 },
+            { type: 'pointerUp',   button: 0 },
+        ],
+    }]);
+    await driver.releaseActions();
+    await driver.pause(500);
+}
+
+// Core dropdown interaction — finds spinner by hint, opens it, selects value.
+async function selectFromDropdown(driver, hintSubstring, value, optionsList = []) {
+    console.log(`▶ selectFromDropdown: hint="${hintSubstring}" value="${value}"`);
+
+    // 1. Scroll until the spinner is visible
+    await scrollToSpinner(driver, hintSubstring);
+    await dismissKeyboardIfVisible(driver);
+    await driver.pause(300);
+
+    // 2. Find spinner by hint
+    const spinner = await findSpinnerByHint(driver, hintSubstring);
+    const loc  = await spinner.getLocation();
+    const size = await spinner.getSize();
+    console.log(`📍 Spinner @ (${loc.x}, ${loc.y}), size (${size.width}×${size.height})`);
+
+    // 3. Tap the dropdown arrow (right edge of spinner)
+    const tapX = Math.floor(loc.x + size.width - 40);
+    const tapY = Math.floor(loc.y + size.height / 2);
+    console.log(`📍 Tapping dropdown arrow at (${tapX}, ${tapY})`);
+    await tapByCoords(driver, tapX, tapY);
+    await driver.pause(2000);
+
+    // 4. Verify popup opened (CheckedTextView items appear)
+    let source = await driver.getPageSource();
+    if (!source.includes('CheckedTextView')) {
+        console.log('🔄 Dropdown did not open on first tap — retrying…');
+        await tapByCoords(driver, tapX, tapY);
+        await driver.pause(2000);
+        source = await driver.getPageSource();
+    }
+
+    if (!source.includes('CheckedTextView')) {
+        console.log('⚠️  Popup still not open — trying center tap…');
+        const cx = Math.floor(loc.x + size.width / 2);
+        const cy = Math.floor(loc.y + size.height / 2);
+        await tapByCoords(driver, cx, cy);
+        await driver.pause(2000);
+    }
+
+    // 5. Select the option — CheckedTextView strategies first
+    await selectOptionFromOpenDropdown(driver, value, loc, size, optionsList);
+}
+
+async function selectOptionFromOpenDropdown(driver, value, spinnerLoc, spinnerSize, optionsList) {
+    // ── Strategy 0: CheckedTextView UiSelector ────────────────
+    try {
+        const item = await driver.$(
+            `android=new UiSelector().className("android.widget.CheckedTextView").text("${value}")`
+        );
+        await item.waitForDisplayed({ timeout: 4000 });
+        const iloc = await item.getLocation();
+        const isz  = await item.getSize();
+        const icx  = Math.floor(iloc.x + isz.width  / 2);
+        const icy  = Math.floor(iloc.y + isz.height / 2);
+        console.log(`📍 Found "${value}" via CheckedTextView UiSelector → tap(${icx},${icy})`);
+        await tapByCoords(driver, icx, icy);
+        console.log(`✅ Selected "${value}" via CheckedTextView UiSelector`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  CheckedTextView UiSelector failed: ${e.message}`);
+    }
+
+    // ── Strategy 1: XPath restricted to CheckedTextView ───────
+    try {
+        const item = await driver.$(`//android.widget.CheckedTextView[@text="${value}"]`);
+        await item.waitForDisplayed({ timeout: 4000 });
+        const iloc = await item.getLocation();
+        const isz  = await item.getSize();
+        const icx  = Math.floor(iloc.x + isz.width  / 2);
+        const icy  = Math.floor(iloc.y + isz.height / 2);
+        console.log(`📍 Found "${value}" via XPath CheckedTextView → tap(${icx},${icy})`);
+        await tapByCoords(driver, icx, icy);
+        console.log(`✅ Selected "${value}" via XPath CheckedTextView`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  XPath CheckedTextView failed: ${e.message}`);
+    }
+
+    // ── Strategy 2: UiSelector text + resource-id guard ───────
+    try {
+        const item  = await driver.$(`android=new UiSelector().text("${value}")`);
+        await item.waitForDisplayed({ timeout: 3000 });
+        const resId = await item.getAttribute('resource-id');
+        if (resId !== 'android:id/text1') {
+            throw new Error(`Matched non-popup element (resource-id="${resId}") — skipping`);
+        }
+        const iloc = await item.getLocation();
+        const isz  = await item.getSize();
+        const icx  = Math.floor(iloc.x + isz.width  / 2);
+        const icy  = Math.floor(iloc.y + isz.height / 2);
+        console.log(`📍 Found "${value}" via UiSelector+guard → tap(${icx},${icy})`);
+        await tapByCoords(driver, icx, icy);
+        console.log(`✅ Selected "${value}" via UiSelector+guard`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  UiSelector+guard failed: ${e.message}`);
+    }
+
+    // ── Strategy 3: XML tag parse — CheckedTextView only ──────
+    try {
+        const source       = await driver.getPageSource();
+        const nodes        = source.match(/<[^>]+>/g) || [];
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const textRegex    = new RegExp(`(?:text|content-desc)="\\s*${escapedValue}\\s*"`);
+        let foundNode      = null;
+        for (const node of nodes) {
+            if (node.includes('CheckedTextView') && textRegex.test(node) && node.includes('bounds=')) {
+                foundNode = node;
+                break;
+            }
+        }
+        if (foundNode) {
+            const bm = foundNode.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            if (bm) {
+                const cx = Math.floor((parseInt(bm[1]) + parseInt(bm[3])) / 2);
+                const cy = Math.floor((parseInt(bm[2]) + parseInt(bm[4])) / 2);
+                console.log(`📍 Found "${value}" via CheckedTextView tag parse → tap(${cx},${cy})`);
+                await tapByCoords(driver, cx, cy);
+                console.log(`✅ Selected "${value}" via CheckedTextView tag parse`);
+                return;
+            }
+        }
+        console.log(`⚠️  "${value}" not found via CheckedTextView tag parse`);
+    } catch (e) {
+        console.log(`⚠️  Tag parse failed: ${e.message}`);
+    }
+
+    // ── Strategy 4: Coordinate fallback ───────────────────────
+    if (!optionsList.length) {
+        throw new Error(`❌ Could not select "${value}" — all strategies failed and no optionsList provided.`);
+    }
+    const screen = await driver.getWindowRect();
+    const idx    = optionsList.indexOf(value);
+    if (idx === -1) throw new Error(`"${value}" not in optionsList: [${optionsList.join(', ')}]`);
+
+    const spinnerBottom = spinnerLoc.y + spinnerSize.height;
+    const spaceBelow    = screen.height - spinnerBottom;
+    const opensUpward   = spaceBelow < (optionsList.length * POPUP_ROW_HEIGHT);
+    const finalX        = Math.floor(spinnerLoc.x + spinnerSize.width / 2);
+    let   finalY;
+
+    if (opensUpward) {
+        const reversedIdx = (optionsList.length - 1) - idx;
+        finalY = Math.floor(spinnerLoc.y - (reversedIdx * POPUP_ROW_HEIGHT) - (POPUP_ROW_HEIGHT / 2));
+    } else {
+        finalY = Math.floor(spinnerBottom + (idx * POPUP_ROW_HEIGHT) + (POPUP_ROW_HEIGHT / 2));
+    }
+    finalY = Math.max(5, Math.min(finalY, screen.height - 5));
+    console.log(`📍 Coordinate fallback (opensUpward=${opensUpward}) → tap(${finalX},${finalY})`);
+    await tapByCoords(driver, finalX, finalY);
+    console.log(`✅ Selected "${value}" via coordinates`);
+}
+
+
+// ─────────────────────────────────────────────────────────────
+//  SCROLL HELPERS
+// ─────────────────────────────────────────────────────────────
+
+async function scrollPage(driver, direction = 'up') {
+    const screen = await driver.getWindowRect();
+    const swipeX = Math.floor(screen.width / 2);
+    const startY = direction === 'up'
+        ? Math.floor(screen.height * 0.70)
+        : Math.floor(screen.height * 0.30);
+    const endY = direction === 'up'
+        ? Math.floor(screen.height * 0.30)
+        : Math.floor(screen.height * 0.70);
+
+    await driver.performActions([{
+        type: 'pointer', id: 'finger1',
+        parameters: { pointerType: 'touch' },
+        actions: [
+            { type: 'pointerMove', duration: 0,   x: swipeX, y: startY },
+            { type: 'pointerDown', button: 0 },
+            { type: 'pause',       duration: 80  },
+            { type: 'pointerMove', duration: 600, x: swipeX, y: endY   },
+            { type: 'pointerUp',   button: 0 },
+        ],
+    }]);
+    await driver.releaseActions();
+    await driver.pause(700);
+}
+
+async function scrollDownToText(driver, text, maxScrolls = 5) {
+    const xpath = `//*[contains(@text,"${text}") or contains(@hint,"${text}")]`;
+    for (let i = 0; i < maxScrolls; i++) {
+        try {
+            const el = await driver.$(xpath);
+            if (await el.isExisting() && await el.isDisplayed()) return;
+        } catch { /* not yet visible */ }
+        await scrollPage(driver, 'up');
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+//  NAMED DROPDOWN WRAPPERS  (all hint-based — no instance())
+// ─────────────────────────────────────────────────────────────
+
+async function selectAbortionType(driver, value) {
+    await selectFromDropdown(driver, 'Abortion Type', value, OPTIONS.abortionType);
+}
+
+async function selectFacilityPlaceOfAbortion(driver, value) {
+    await selectFromDropdown(driver, 'Place of Abortion', value, OPTIONS.facilityPlaceOfAbortion);
+}
+
+async function selectReasonForDeath(driver, value) {
+    await selectFromDropdown(driver, 'Reason for Death', value, OPTIONS.reasonForDeath);
+}
+
+async function selectPlaceOfDeath(driver, value) {
+    await selectFromDropdown(driver, 'Place of Death', value, OPTIONS.placeOfDeath);
+}
+
+async function selectPlaceOfAnc(driver, value) {
+    console.log(`▶ selectPlaceOfAnc: value="${value}"`);
+
+    // 1. Scroll until the spinner is visible
+    await scrollToSpinner(driver, 'Place of ANC');
+    await driver.pause(300);
+
+    // 2. Find spinner by hint
+    const spinner = await findSpinnerByHint(driver, 'Place of ANC');
+    const loc  = await spinner.getLocation();
+    const size = await spinner.getSize();
+
+    // 3. Tap the dropdown arrow
+    const tapX = Math.floor(loc.x + size.width - 40);
+    const tapY = Math.floor(loc.y + size.height / 2);
+    console.log(`📍 Tapping Place of ANC dropdown arrow at (${tapX}, ${tapY})`);
+    await tapByCoords(driver, tapX, tapY);
+    await driver.pause(1500); // Give the UI time to react (open keyboard/dropdown)
+
+    // 4. Check if keyboard opened after the click and close it
+    try {
+        if (await driver.isKeyboardShown()) {
+            console.log('⌨️  Keyboard opened after click — dismissing...');
+            try {
+                await driver.hideKeyboard();
+            } catch (e) {
+                await driver.pressKeyCode(4);
+            }
+            await driver.pause(1500); // Wait for the keyboard animation to fully finish
+        }
+    } catch (e) {
+        console.log('⚠️  Keyboard check failed:', e.message);
+    }
+
+    // 5. SECURE OPEN LOOP: Check state using the structural end-icon attribute
+    let isOpen = false;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (!isOpen && attempts < maxAttempts) {
+        try {
+            const source = await driver.getPageSource();
+
+            // Check if the drop down end icon button is in a checked="true" state in the XML
+            if (source.includes('resource-id="org.piramalswasthya.sakhi.saksham.uat:id/text_input_end_icon"') &&
+                source.includes('checked="true"')) {
+                isOpen = true;
+                break;
+            }
+
+            // Backwards compatibility fallback check
+            if (source.includes('CheckedTextView')) {
+                isOpen = true;
+                break;
+            }
+        } catch (e) {
+            console.log('⚠️ Error checking dropdown layout state:', e.message);
+        }
+
+        if (!isOpen) {
+            attempts++;
+            console.log(`🔄 Dropdown is closed structurally (Attempt ${attempts}/${maxAttempts}). Tapping to open...`);
+            await tapByCoords(driver, tapX, tapY);
+            await driver.pause(2000); // Wait for dropdown layer to populate
+        }
+    }
+
+    if (!isOpen) {
+        console.log('⚠️ Verification loop timed out, attempting selection phase anyway...');
+    } else {
+        console.log('✅ Dropdown popup verified open via icon status.');
+    }
+
+    // 6. Select the option from the open dropdown
+    await selectOptionFromOpenDropdown(driver, value, loc, size, OPTIONS.placeOfAnc);
+}
+
+async function selectAncPeriod(driver, value) {
+    await selectFromDropdown(driver, 'ANC Period', value, OPTIONS.ancPeriod);
+}
+
+async function selectHighRiskCondition(driver, value) {
+    await selectFromDropdown(driver, 'High Risk', value, []);
+}
+
+async function selectReferralFacility(driver, value) {
+    console.log(`▶ selectReferralFacility: value="${value}"`);
+
+    // 1. Scroll until the spinner is visible
+    await scrollToSpinner(driver, 'Referral Facility');
+    await driver.pause(300);
+
+    // 2. Find spinner by hint
+    // Note: The XML shows the text is "Referral Facility"
+    const spinner = await findSpinnerByHint(driver, 'Referral Facility');
+    const loc  = await spinner.getLocation();
+    const size = await spinner.getSize();
+
+    // 3. Tap the dropdown arrow
+    const tapX = Math.floor(loc.x + size.width - 40);
+    const tapY = Math.floor(loc.y + size.height / 2);
+    console.log(`📍 Tapping Referral Facility dropdown arrow at (${tapX}, ${tapY})`);
+    await tapByCoords(driver, tapX, tapY);
+    await driver.pause(1500); // Give the UI time to react (open keyboard/dropdown)
+
+    // 4. Check if keyboard opened after the click and close it
+    try {
+        if (await driver.isKeyboardShown()) {
+            console.log('⌨️  Keyboard opened after click — dismissing...');
+            try {
+                await driver.hideKeyboard();
+            } catch (e) {
+                await driver.pressKeyCode(4);
+            }
+            await driver.pause(1500); // Wait for the keyboard animation to fully finish
+        }
+    } catch (e) {
+        console.log('⚠️  Keyboard check failed:', e.message);
+    }
+
+    // 5. SECURE OPEN LOOP: Check state using the structural end-icon attribute
+    let isOpen = false;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (!isOpen && attempts < maxAttempts) {
+        try {
+            const source = await driver.getPageSource();
+
+            // Check if the drop down end icon button is in a checked="true" state in the XML
+            if (source.includes('resource-id="org.piramalswasthya.sakhi.saksham.uat:id/text_input_end_icon"') &&
+                source.includes('checked="true"')) {
+                isOpen = true;
+                break;
+            }
+
+            // Backwards compatibility fallback check
+            if (source.includes('CheckedTextView')) {
+                isOpen = true;
+                break;
+            }
+        } catch (e) {
+            console.log('⚠️ Error checking dropdown layout state:', e.message);
+        }
+
+        if (!isOpen) {
+            attempts++;
+            console.log(`🔄 Dropdown is closed structurally (Attempt ${attempts}/${maxAttempts}). Tapping to open...`);
+            await tapByCoords(driver, tapX, tapY);
+            await driver.pause(2000); // Wait for dropdown layer to populate
+        }
+    }
+
+    if (!isOpen) {
+        console.log('⚠️ Verification loop timed out, attempting selection phase anyway...');
+    } else {
+        console.log('✅ Dropdown popup verified open via icon status.');
+    }
+
+    // 6. Select the option from the open dropdown
+    const referralOptions = [
+        'Primary Health Centre',
+        'Community Health Centre',
+        'District Hospital',
+        'Other Private Hospital'
+    ];
+    await selectOptionFromOpenDropdown(driver, value, loc, size, referralOptions);
+}
+
+async function selectIdentifiedAsHrp(driver, value) {
+    console.log(`▶ selectIdentifiedAsHrp: value="${value}"`);
+
+    // 1. Scroll until the spinner is visible
+    await scrollToSpinner(driver, 'Who had identified as HRP?');
+    await driver.pause(300);
+
+    // 2. Find spinner by hint
+    const spinner = await findSpinnerByHint(driver, 'Who had identified as HRP?');
+    const loc  = await spinner.getLocation();
+    const size = await spinner.getSize();
+
+    // 3. Tap the dropdown arrow (right edge of spinner)
+    const tapX = Math.floor(loc.x + size.width - 40);
+    const tapY = Math.floor(loc.y + size.height / 2);
+    console.log(`📍 Tapping Identified as HRP dropdown arrow at (${tapX}, ${tapY})`);
+    await tapByCoords(driver, tapX, tapY);
+    await driver.pause(1500);
+
+    // 4. Dismiss keyboard if it appeared
+    try {
+        if (await driver.isKeyboardShown()) {
+            console.log('⌨️  Keyboard opened — dismissing...');
+            try { await driver.hideKeyboard(); }
+            catch (e) { await driver.pressKeyCode(4); }
+            await driver.pause(1500);
+        }
+    } catch (e) {
+        console.log('⚠️  Keyboard check failed:', e.message);
+    }
+
+    // 5. Wait for the popup window to appear — poll until CheckedTextView
+    //    items are reachable via UiAutomator (they live in a separate window
+    //    so getPageSource() misses them; UiSelector searches ALL windows).
+    let popupOpen = false;
+    for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+            const probe = await driver.$(
+                `android=new UiSelector().className("android.widget.CheckedTextView").index(0)`
+            );
+            if (await probe.isExisting()) {
+                popupOpen = true;
+                break;
+            }
+        } catch (e) { /* not yet visible */ }
+
+        console.log(`🔄 Popup not open yet (attempt ${attempt + 1}/4) — tapping again...`);
+        await tapByCoords(driver, tapX, tapY);
+        await driver.pause(1500);
+    }
+
+    if (!popupOpen) {
+        console.log('⚠️  Popup still not detected — attempting selection anyway...');
+    } else {
+        console.log('✅ Popup confirmed open via UiSelector CheckedTextView probe.');
+    }
+
+    // 6. Select the item — UiSelector searches ALL windows including the popup
+    const hrpOptions = ['ANM', 'CHO', 'PHC – MO', 'Specialist at Higher Facility'];
+
+    // Strategy A: UiSelector by text across all windows (most reliable for multi-window popups)
+    try {
+        const item = await driver.$(
+            `android=new UiSelector().className("android.widget.CheckedTextView").text("${value}")`
+        );
+        await item.waitForExist({ timeout: 3000 });
+        const iloc = await item.getLocation();
+        const isz  = await item.getSize();
+        const icx  = Math.floor(iloc.x + isz.width  / 2);
+        const icy  = Math.floor(iloc.y + isz.height / 2);
+        console.log(`📍 Found "${value}" via UiSelector CheckedTextView → tap(${icx},${icy})`);
+        await tapByCoords(driver, icx, icy);
+        console.log(`✅ Selected "${value}" via UiSelector CheckedTextView`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  UiSelector CheckedTextView failed: ${e.message}`);
+    }
+
+    // Strategy B: XPath — also searches all windows in UIA2
+    try {
+        const item = await driver.$(`//android.widget.CheckedTextView[@text="${value}"]`);
+        await item.waitForExist({ timeout: 3000 });
+        const iloc = await item.getLocation();
+        const isz  = await item.getSize();
+        const icx  = Math.floor(iloc.x + isz.width  / 2);
+        const icy  = Math.floor(iloc.y + isz.height / 2);
+        console.log(`📍 Found "${value}" via XPath CheckedTextView → tap(${icx},${icy})`);
+        await tapByCoords(driver, icx, icy);
+        console.log(`✅ Selected "${value}" via XPath CheckedTextView`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  XPath CheckedTextView failed: ${e.message}`);
+    }
+
+    // Strategy C: android:id/text1 resource-id (popup items always use this id)
+    try {
+        const item = await driver.$(
+            `android=new UiSelector().resourceId("android:id/text1").text("${value}")`
+        );
+        await item.waitForExist({ timeout: 3000 });
+        const iloc = await item.getLocation();
+        const isz  = await item.getSize();
+        const icx  = Math.floor(iloc.x + isz.width  / 2);
+        const icy  = Math.floor(iloc.y + isz.height / 2);
+        console.log(`📍 Found "${value}" via android:id/text1 → tap(${icx},${icy})`);
+        await tapByCoords(driver, icx, icy);
+        console.log(`✅ Selected "${value}" via android:id/text1`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  android:id/text1 strategy failed: ${e.message}`);
+    }
+
+    // Strategy D: Hard-coded bounds from XML — popup is ALWAYS at [94,1418][1037,1860]
+    //             ANM row: [94,1435][1037,1537]  → centre (565, 1486)
+    //             CHO row: [94,1537][1037,1639]  → centre (565, 1588)
+    //             PHC – MO: [94,1639][1037,1741] → centre (565, 1690)
+    //             Specialist: [94,1741][1037,1843]→ centre (565, 1792)
+    const hardcodedCoords = {
+        'ANM':                          { x: 565, y: 1486 },
+        'CHO':                          { x: 565, y: 1588 },
+        'PHC \u2013 MO':               { x: 565, y: 1690 },  // PHC – MO (en-dash)
+        'Specialist at Higher Facility':{ x: 565, y: 1792 },
+    };
+    if (hardcodedCoords[value]) {
+        const { x, y } = hardcodedCoords[value];
+        console.log(`📍 Using hardcoded popup coords for "${value}" → tap(${x},${y})`);
+        await tapByCoords(driver, x, y);
+        console.log(`✅ Selected "${value}" via hardcoded coords`);
+        return;
+    }
+
+    // Strategy E: Last-resort index-based coordinate fallback
+    const idx = hrpOptions.indexOf(value);
+    if (idx === -1) throw new Error(`"${value}" not in hrpOptions`);
+    const POPUP_TOP    = 1435;
+    const ROW_HEIGHT   = 102;
+    const fallbackX    = 565;
+    const fallbackY    = POPUP_TOP + (idx * ROW_HEIGHT) + Math.floor(ROW_HEIGHT / 2);
+    console.log(`📍 Index-based fallback for "${value}" → tap(${fallbackX},${fallbackY})`);
+    await tapByCoords(driver, fallbackX, fallbackY);
+    console.log(`✅ Selected "${value}" via index-based fallback`);
+}
+
+async function swipeHorizontal(driver, direction) {
+    const size   = await driver.getWindowRect();
+    const startX = direction === 'left'
+        ? Math.floor(size.width * 0.80)
+        : Math.floor(size.width * 0.20);
+    const endX   = direction === 'left'
+        ? Math.floor(size.width * 0.20)
+        : Math.floor(size.width * 0.80);
+    const midY   = Math.floor(size.height * 0.50);
+
+    await driver.performActions([{
+        type: 'pointer', id: 'finger1',
+        parameters: { pointerType: 'touch' },
+        actions: [
+            { type: 'pointerMove', duration: 0,   x: startX, y: midY },
+            { type: 'pointerDown', button: 0 },
+            { type: 'pause',       duration: 80  },
+            { type: 'pointerMove', duration: 450, x: endX,   y: midY },
+            { type: 'pointerUp',   button: 0 },
+        ],
+    }]);
+    await driver.releaseActions();
+    await driver.pause(900);
+}
+
 async function getCalendarMonthYear(driver) {
     try {
-        const dayElement = await driver.$('android=new UiSelector().text("15")');
-        const contentDesc = await dayElement.getAttribute('content-desc');
-        const parts = contentDesc.split(' ');
-        return { month: MONTH_NAMES.indexOf(parts[1]), year: parseInt(parts[2]) };
-    } catch (error) { return null; }
+        const firstDay = await driver.$(
+            'android=new UiSelector().resourceId("android:id/month_view")' +
+            '.childSelector(new UiSelector().clickable(true))'
+        );
+        const desc  = await firstDay.getAttribute('content-desc');
+        const parts = desc.trim().split(' ');
+        return { month: MONTH_NAMES.indexOf(parts[1]), year: parseInt(parts[2], 10) };
+    } catch (e) {
+        console.error('getCalendarMonthYear failed:', e.message);
+        return null;
+    }
 }
 
 async function navigateToMonth(driver, targetMonth, targetYear) {
-    const yearHeader = await driver.$('android=new UiSelector().resourceId("android:id/date_picker_header_year")');
-    const currentYear = parseInt(await yearHeader.getText());
+    const yearHeader = await driver.$(
+        'android=new UiSelector().resourceId("android:id/date_picker_header_year")'
+    );
+    await yearHeader.waitForDisplayed({ timeout: 3000 });
+    const currentYear = parseInt(await yearHeader.getText(), 10);
 
     if (currentYear !== targetYear) {
         await yearHeader.click();
         await driver.pause(1000);
-        const yearEl = await driver.$(`android=new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("${targetYear}")`);
+        const yearEl = await driver.$(
+            `android=new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("${targetYear}")`
+        );
         await yearEl.click();
         await driver.pause(1000);
     }
 
-    for (let i = 0; i < 12; i++) {
+    const prevBtn = await driver.$('android=new UiSelector().resourceId("android:id/prev")');
+    for (let i = 0; i < 24; i++) {
         const cur = await getCalendarMonthYear(driver);
         if (!cur) break;
-
-        if (cur.month === targetMonth) break;
-
-        const direction = cur.month < targetMonth ? 'left' : 'right';
-        await swipeHorizontal(driver, direction);
+        const curTotal = cur.year * 12 + cur.month;
+        const tgtTotal = targetYear * 12 + targetMonth;
+        if (curTotal === tgtTotal) break;
+        if (curTotal > tgtTotal) await prevBtn.click();
+        else await swipeHorizontal(driver, 'left');
+        await driver.pause(800);
     }
 }
 
 async function pickDateFromCalendar(driver, dateObj) {
     const { day, month, year } = dateObj;
-    await (await driver.$('android=new UiSelector().resourceId("android:id/datePicker")')).waitForDisplayed({ timeout: 5000 });
-
+    const datePicker = await driver.$(
+        'android=new UiSelector().resourceId("android:id/datePicker")'
+    );
+    await datePicker.waitForDisplayed({ timeout: 5000 });
     await navigateToMonth(driver, month, year);
-
-    const formattedDay = String(day);
-    const dayToClick = await driver.$(`android=new UiSelector().text("${formattedDay}").clickable(true)`);
-    await dayToClick.click();
     await driver.pause(500);
 
-    const okBtn = await driver.$('//android.widget.Button[@text="OK" or @resource-id="android:id/button1"]');
+    const paddedDay  = String(day).padStart(2, '0');
+    const monthName  = MONTH_NAMES[month];
+    const targetDesc = `${paddedDay} ${monthName} ${year}`;
+
+    const dayEl = await driver.$(`android=new UiSelector().description("${targetDesc}")`);
+    await dayEl.waitForDisplayed({ timeout: 3000 });
+    await dayEl.click();
+    await driver.pause(500);
+
+    const okBtn = await driver.$('android=new UiSelector().resourceId("android:id/button1")');
     await okBtn.click();
+    console.log(`✔ Date selected: ${targetDesc}`);
+
+    await driver.waitUntil(
+        async () => !(await datePicker.isExisting()),
+        { timeout: 5000, timeoutMsg: 'Calendar dialog did not close.' }
+    );
+    await driver.pause(1000);
 }
 
 
-async function fillAncDate(driver) {
-    console.log('Processing ANC Date...');
-    const field = await driver.$('//android.widget.EditText[@text="ANC Date *" or @hint="ANC Date *"]');
-    await field.waitForDisplayed({ timeout: 5000 });
+async function fillTextInput(driver, hintText, value, scrollLabel, maxScrolls = 5) {
+    console.log(`Processing "${scrollLabel || hintText}"…`);
 
-    if (await isEmpty(field, 'ANC Date *')) {
+    const xpath = `//android.widget.EditText[contains(@hint,"${hintText}")]`;
+    let field = await driver.$(xpath);
+    let isVisible = (await field.isExisting()) && (await field.isDisplayed());
+
+    // 1. Search downwards (swiping 'up' on the screen moves the view down)
+    let attemptsDown = 0;
+    while (!isVisible && attemptsDown < maxScrolls) {
+        console.log(`🔄 "${hintText}" not found. Scrolling down...`);
+        await scrollPage(driver, 'up');
+
+        field = await driver.$(xpath);
+        isVisible = (await field.isExisting()) && (await field.isDisplayed());
+        attemptsDown++;
+    }
+
+    // 2. Search upwards (swiping 'down' on the screen moves the view up)
+    // We do (attemptsDown + maxScrolls) to cover the distance we just scrolled down, plus extra.
+    let attemptsUp = 0;
+    let maxUpScrolls = attemptsDown + maxScrolls;
+
+    while (!isVisible && attemptsUp < maxUpScrolls) {
+        console.log(`🔄 "${hintText}" not found. Reversing! Scrolling up...`);
+        await scrollPage(driver, 'down');
+
+        field = await driver.$(xpath);
+        isVisible = (await field.isExisting()) && (await field.isDisplayed());
+        attemptsUp++;
+    }
+
+    // 3. Final Check
+    if (!isVisible) {
+        console.error(`❌ Field "${hintText}" not found after scanning both down and up.`);
+        return;
+    }
+
+    // 4. Fill the field
+    const current = (await field.getText() || '').trim();
+    if (current === String(value).trim()) {
+        console.log(`➡  Already "${value}".`);
+        return;
+    }
+
+    await field.click();
+    await field.clearValue();
+    await field.setValue(value);
+
+    // Hide keyboard if it pops up
+    try {
+        await driver.pause(500);
+        if (await driver.isKeyboardShown()) {
+            try { await driver.hideKeyboard(); }
+            catch (e) { await driver.pressKeyCode(4); }
+            await driver.pause(1000);
+        }
+    } catch (e) {
+        console.log('⚠️  Could not hide keyboard:', e.message);
+    }
+
+    console.log(`✔ "${scrollLabel || hintText}" set to "${value}".`);
+}
+
+async function fillAncDate(driver) {
+    console.log('Processing ANC Date…');
+    const field = await driver.$(
+        '//android.widget.EditText[@text="ANC Date *" or @hint="ANC Date *"]'
+    );
+    await field.waitForDisplayed({ timeout: 5000 });
+    const current = (await field.getText() || '').trim();
+    if (!current || current === 'ANC Date *') {
         await field.click();
         await driver.pause(1000);
         await pickDateFromCalendar(driver, FORM_DATA.ancDate);
-        console.log('✔ ANC Date filled successfully.');
     } else {
-        console.log('➡ ANC Date is already filled.');
+        console.log('➡  ANC Date already filled.');
     }
 }
 
-async function fillPlaceOfAnc(driver) {
-    console.log('Processing Place of ANC...');
-    const spinner = await driver.$('//android.widget.Spinner[@text="Place of ANC *" or @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown"]');
-
-    if (await spinner.isExisting()) {
-        const currentText = await spinner.getText();
-        if (currentText !== FORM_DATA.placeOfAnc) {
-            await tapAt(driver, PLACE_OF_ANC_ARROW.x, PLACE_OF_ANC_ARROW.y);
+async function fillAbortionIfAny(driver) {
+    console.log('Processing "Abortion If Any"…');
+    await scrollDownToText(driver, 'Abortion If Any', 3);
+    const xpath =
+        `//android.widget.TextView[@text="Abortion If Any"]` +
+        `/parent::android.widget.LinearLayout` +
+        `/following-sibling::android.widget.RadioGroup` +
+        `/android.widget.RadioButton[@text="${FORM_DATA.abortionIfAny}"]`;
+    const btn = await driver.$(xpath);
+    if (await btn.isExisting()) {
+        if ((await btn.getAttribute('checked')) !== 'true') {
+            await btn.click();
+            console.log(`✔ "Abortion If Any" set to "${FORM_DATA.abortionIfAny}".`);
             await driver.pause(1500);
-
-            const coords = PLACE_OF_ANC_COORDS[FORM_DATA.placeOfAnc];
-            if (coords) {
-                await tapAt(driver, coords.x, coords.y);
-                console.log(`✔ Place of ANC updated to "${FORM_DATA.placeOfAnc}".`);
-            } else {
-                console.error(`❌ Option "${FORM_DATA.placeOfAnc}" not found in coordinate map.`);
-            }
-        } else {
-            console.log(`➡ Place of ANC is already set to "${FORM_DATA.placeOfAnc}".`);
-        }
+        } else { console.log('➡  Already set.'); }
     } else {
-        console.error('❌ Could not find "Place of ANC" dropdown field.');
+        console.error('❌ "Abortion If Any" radio not found.');
     }
 }
 
-async function fillAncPeriod(driver) {
-    console.log('Processing ANC Period...');
+async function fillAbortionDate(driver) {
+    console.log('Processing Abortion Date…');
+    await scrollDownToText(driver, 'Abortion Date', 3);
+    const field = await driver.$(
+        '//android.widget.EditText[contains(@text,"Abortion Date") or contains(@hint,"Abortion Date")]'
+    );
+    if (await field.isExisting() && await field.isDisplayed()) {
+        const current = (await field.getText() || '').trim();
+        if (!current || current.includes('Abortion Date')) {
+            await field.click();
+            await driver.pause(1000);
+            await pickDateFromCalendar(driver, FORM_DATA.abortionDate);
+        } else { console.log('➡  Abortion Date already filled.'); }
+    }
+}
 
-    const spinner = await driver.$('//android.widget.Spinner[@hint="ANC Period *"]');
-
-    if (await spinner.isExisting()) {
-        const currentText = await spinner.getText();
-
-        if (currentText !== FORM_DATA.ancPeriod) {
-            await tapAt(driver, ANC_PERIOD_ARROW.x, ANC_PERIOD_ARROW.y);
-            await driver.pause(1500);
-
-            const coords = ANC_PERIOD_COORDS[FORM_DATA.ancPeriod];
-
-            if (coords) {
-                await tapAt(driver, coords.x, coords.y);
-                console.log(`✔ ANC Period updated to "${FORM_DATA.ancPeriod}".`);
-            } else {
-                console.error(`❌ Option "${FORM_DATA.ancPeriod}" not found in coordinate map.`);
-            }
-        } else {
-            console.log(`➡ ANC Period is already set to "${FORM_DATA.ancPeriod}".`);
-        }
-    } else {
-        console.error('❌ Could not find "ANC Period" dropdown field.');
+async function fillAbortionSection(driver) {
+    await fillAbortionIfAny(driver);
+    if (FORM_DATA.abortionIfAny === 'Yes') {
+        await selectAbortionType(driver, FORM_DATA.abortionType);
+        await selectFacilityPlaceOfAbortion(driver, FORM_DATA.facilityPlaceOfAbortion);
+        await fillAbortionDate(driver);
     }
 }
 
 async function fillMaternalDeath(driver) {
-    console.log('Processing Maternal Death...');
-    await scrollDownToText(driver, "Maternal Death", 2);
-
-    const radioXPath = `//android.widget.TextView[@text="Maternal Death"]/parent::android.widget.LinearLayout/following-sibling::android.widget.RadioGroup/android.widget.RadioButton[@text="${FORM_DATA.maternalDeath}"]`;
-    const radioButton = await driver.$(radioXPath);
-
-    if (await radioButton.isExisting()) {
-        const isChecked = await radioButton.getAttribute('checked');
-        if (isChecked !== 'true') {
-            await radioButton.click();
-            console.log(`✔ Maternal Death set to "${FORM_DATA.maternalDeath}".`);
-        } else {
-            console.log(`➡ Maternal Death is already set to "${FORM_DATA.maternalDeath}".`);
-        }
+    console.log('Processing "Is the Pregnant Woman alive?"…');
+    await scrollDownToText(driver, 'Is the Pregnant Woman alive?', 2);
+    const xpath =
+        `//android.widget.TextView[@text="Is the Pregnant Woman alive?"]` +
+        `/parent::android.widget.LinearLayout` +
+        `/following-sibling::android.widget.RadioGroup` +
+        `/android.widget.RadioButton[@text="${FORM_DATA.isWomanAlive}"]`;
+    const btn = await driver.$(xpath);
+    if (await btn.isExisting()) {
+        if ((await btn.getAttribute('checked')) !== 'true') {
+            await btn.click();
+            console.log(`✔ "Is the Pregnant Woman alive?" set to "${FORM_DATA.isWomanAlive}".`);
+            await driver.pause(1500);
+        } else { console.log('➡  Already set.'); }
     } else {
-        console.error('❌ Could not find Maternal Death radio buttons.');
-    }
-}
-
-async function fillHasDelivered(driver) {
-    console.log('Processing "Has the pregnant woman delivered?"...');
-    await scrollDownToText(driver, "Has the pregnant woman delivered?", 2);
-
-    const radioXPath = `//android.widget.TextView[@text="Has the pregnant woman delivered?"]/parent::android.widget.LinearLayout/following-sibling::android.widget.RadioGroup/android.widget.RadioButton[@text="${FORM_DATA.delivered}"]`;
-    const radioButton = await driver.$(radioXPath);
-
-    if (await radioButton.isExisting()) {
-        const isChecked = await radioButton.getAttribute('checked');
-        if (isChecked !== 'true') {
-            await radioButton.click();
-            console.log(`✔ "Has the pregnant woman delivered?" set to "${FORM_DATA.delivered}".`);
-        } else {
-            console.log(`➡ "Has the pregnant woman delivered?" is already set to "${FORM_DATA.delivered}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Has the pregnant woman delivered?" radio buttons.');
-    }
-}
-
-async function fillWeight(driver) {
-    console.log('Processing Weight of PW...');
-    await scrollDownToText(driver, "Weight of PW", 2);
-
-    const weightField = await driver.$('//android.widget.EditText[contains(@hint, "Weight of PW")]');
-
-    if (await weightField.isExisting()) {
-        const currentText = await weightField.getText();
-
-        if (currentText !== FORM_DATA.weight && await isEmpty(weightField, "Weight of PW (Kg) at time Registration")) {
-            await weightField.click();
-            await weightField.clearValue();
-            await weightField.setValue(FORM_DATA.weight);
-
-            if (await driver.isKeyboardShown()) {
-                await driver.hideKeyboard();
-            }
-            console.log(`✔ Weight set to "${FORM_DATA.weight}".`);
-        } else {
-            console.log(`➡ Weight is already set or matches "${FORM_DATA.weight}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Weight of PW" input field.');
-    }
-}
-
-async function fillBp(driver) {
-    console.log('Processing BP of PW...');
-    await scrollDownToText(driver, "BP of PW", 2);
-
-    const bpField = await driver.$('//android.widget.EditText[contains(@hint, "BP of PW")]');
-
-    if (await bpField.isExisting()) {
-        const currentText = await bpField.getText();
-
-        if (currentText !== FORM_DATA.bp && await isEmpty(bpField, "BP of PW – Systolic/ Diastolic (mm Hg) ")) {
-            await bpField.click();
-            await bpField.clearValue();
-            await bpField.setValue(FORM_DATA.bp);
-
-            if (await driver.isKeyboardShown()) {
-                await driver.hideKeyboard();
-            }
-            console.log(`✔ BP set to "${FORM_DATA.bp}".`);
-        } else {
-            console.log(`➡ BP is already set or matches "${FORM_DATA.bp}".`);
-        }
-    } else {
-        console.error('❌ Could not find "BP of PW" input field.');
-    }
-}
-
-async function fillHb(driver) {
-    console.log('Processing HB (gm/dl)...');
-    await scrollDownToText(driver, "HB (gm/dl)", 2);
-
-    const hbField = await driver.$('//android.widget.EditText[contains(@hint, "HB (gm/dl)")]');
-
-    if (await hbField.isExisting()) {
-        const currentText = await hbField.getText();
-
-        if (currentText !== FORM_DATA.hb && await isEmpty(hbField, "HB (gm/dl)")) {
-            await hbField.click();
-            await hbField.clearValue();
-            await hbField.setValue(FORM_DATA.hb);
-
-            if (await driver.isKeyboardShown()) {
-                await driver.hideKeyboard();
-            }
-            console.log(`✔ HB set to "${FORM_DATA.hb}".`);
-        } else {
-            console.log(`➡ HB is already set or matches "${FORM_DATA.hb}".`);
-        }
-    } else {
-        console.error('❌ Could not find "HB (gm/dl)" input field.');
-    }
-}
-
-async function fillFundalHeight(driver) {
-    console.log('Processing Fundal Height...');
-    await scrollDownToText(driver, "Fundal Height", 2);
-
-    const fundalField = await driver.$('//android.widget.EditText[contains(@hint, "Fundal Height")]');
-
-    if (await fundalField.isExisting()) {
-        const currentText = await fundalField.getText();
-
-        if (currentText !== FORM_DATA.fundalHeight && await isEmpty(fundalField, "Fundal Height / Size of the Uterus weeks")) {
-            await fundalField.click();
-            await fundalField.clearValue();
-            await fundalField.setValue(FORM_DATA.fundalHeight);
-
-            if (await driver.isKeyboardShown()) {
-                await driver.hideKeyboard();
-            }
-            console.log(`✔ Fundal Height set to "${FORM_DATA.fundalHeight}".`);
-        } else {
-            console.log(`➡ Fundal Height is already set or matches "${FORM_DATA.fundalHeight}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Fundal Height" input field.');
-    }
-}
-
-async function fillIfaTabs(driver) {
-    console.log('Processing No. of IFA Tabs given...');
-    await scrollDownToText(driver, "No. of IFA Tabs given", 3);
-
-    const ifaField = await driver.$('//android.widget.EditText[contains(@hint, "No. of IFA Tabs given")]');
-
-    if (await ifaField.isExisting()) {
-        const currentText = await ifaField.getText();
-
-        if (currentText !== FORM_DATA.ifaTabs && await isEmpty(ifaField, "No. of IFA Tabs given")) {
-            await ifaField.click();
-            await ifaField.clearValue();
-            await ifaField.setValue(FORM_DATA.ifaTabs);
-
-            if (await driver.isKeyboardShown()) {
-                await driver.hideKeyboard();
-            }
-            console.log(`✔ IFA Tabs set to "${FORM_DATA.ifaTabs}".`);
-        } else {
-            console.log(`➡ IFA Tabs is already set or matches "${FORM_DATA.ifaTabs}".`);
-        }
-    } else {
-        console.error('❌ Could not find "No. of IFA Tabs given" input field.');
-    }
-}
-
-async function fillHighRisk(driver) {
-    console.log('Processing "Any High Risk conditions"...');
-    await scrollDownToText(driver, "Any High Risk conditions", 3);
-
-    
-    const radioXPath = `//android.widget.TextView[@text="Any High Risk conditions"]/parent::android.widget.LinearLayout/following-sibling::android.widget.RadioGroup/android.widget.RadioButton[@text="${FORM_DATA.highRisk}"]`;
-    const radioButton = await driver.$(radioXPath);
-
-    if (await radioButton.isExisting()) {
-        const isChecked = await radioButton.getAttribute('checked');
-        if (isChecked !== 'true') {
-            await radioButton.click();
-            console.log(`✔ "Any High Risk conditions" set to "${FORM_DATA.highRisk}".`);
-        } else {
-            console.log(`➡ "Any High Risk conditions" is already set to "${FORM_DATA.highRisk}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Any High Risk conditions" radio buttons.');
-        return; 
-    }
-
-    
-    if (FORM_DATA.highRisk === 'Yes') {
-        await driver.pause(1500); 
-        await scrollDownToText(driver, "High Risk Conditions", 2);
-
-        
-        const spinnerXPath = `//android.widget.TextView[@text="Any High Risk conditions"]/ancestor::android.widget.LinearLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/cl_ri"]/following-sibling::android.view.ViewGroup//android.widget.Spinner`;
-        const spinner = await driver.$(spinnerXPath);
-
-        if (await spinner.isExisting()) {
-            const currentText = await spinner.getText();
-
-            if (currentText !== FORM_DATA.highRiskCondition) {
-                
-                await tapAt(driver, HIGH_RISK_ARROW.x, HIGH_RISK_ARROW.y);
-                await driver.pause(1500);
-
-                
-                const coords = HIGH_RISK_COORDS[FORM_DATA.highRiskCondition];
-                if (coords) {
-                    await tapAt(driver, coords.x, coords.y);
-                    console.log(`✔ High Risk Condition updated to "${FORM_DATA.highRiskCondition}".`);
-                } else {
-                    console.error(`❌ Option "${FORM_DATA.highRiskCondition}" not found in coordinate map.`);
-                }
-            } else {
-                console.log(`➡ High Risk Condition is already set to "${FORM_DATA.highRiskCondition}".`);
-            }
-        } else {
-            console.error('❌ Could not find "High Risk Conditions" dropdown field.');
-        }
-    }
-}
-
-async function fillHighRiskConditionDropdown(driver) {
-    console.log('Processing High Risk Conditions Dropdown...');
-
-    
-    const spinner = await driver.$('//android.widget.Spinner[@hint="High Risk Conditions"]');
-
-    if (await spinner.isExisting()) {
-        const currentText = await spinner.getText();
-
-        if (currentText !== FORM_DATA.highRiskCondition) {
-
-            
-            await tapAt(driver, HIGH_RISK_ARROW.x, HIGH_RISK_ARROW.y);
-            await driver.pause(1500); 
-
-            
-            const coords = HIGH_RISK_COORDS[FORM_DATA.highRiskCondition];
-
-            if (coords) {
-                await tapAt(driver, coords.x, coords.y);
-                console.log(`✔ High Risk Condition updated to "${FORM_DATA.highRiskCondition}".`);
-            } else {
-                console.error(`❌ Option "${FORM_DATA.highRiskCondition}" not found in coordinate map.`);
-            }
-        } else {
-            console.log(`➡ High Risk Condition is already set to "${FORM_DATA.highRiskCondition}".`);
-        }
-    } else {
-        console.error('❌ Could not find "High Risk Conditions" dropdown field.');
-    }
-}
-
-async function fillOtherHighRiskCondition(driver) {
-    console.log('Checking for "Any other High Risk conditions" text field...');
-
-    await scrollDownToText(driver, "Any other High Risk", 2);
-
-    const otherField = await driver.$('//android.widget.EditText[contains(@hint, "Any other High Risk") or contains(@text, "Any other High Risk")]');
-
-    if (await otherField.isExisting() && await otherField.isDisplayed()) {
-        const currentText = await otherField.getText();
-
-        if (currentText !== FORM_DATA.otherHighRisk && await isEmpty(otherField, "Any other High Risk conditions *")) {
-            await otherField.click();
-            await otherField.clearValue();
-            await otherField.setValue(FORM_DATA.otherHighRisk);
-
-            if (await driver.isKeyboardShown()) {
-                await driver.hideKeyboard();
-            }
-            console.log(`✔ "Any other High Risk conditions" text filled with "${FORM_DATA.otherHighRisk}".`);
-        } else {
-            console.log(`➡ "Any other High Risk conditions" text is already set to "${FORM_DATA.otherHighRisk}".`);
-        }
-    } else {
-        console.log('➡ "Any other High Risk conditions" field not shown, skipping to next.');
-    }
-}
-
-async function fillReferralFacility(driver) {
-    console.log('Processing Referral Facility Dropdown...');
-
-    
-    await scrollDownToText(driver, "Referral Facility", 2);
-
-    const spinner = await driver.$('//android.widget.Spinner[@text="Referral Facility" or @hint="Referral Facility"]');
-
-    if (await spinner.isExisting()) {
-        const currentText = await spinner.getText();
-
-        if (currentText !== FORM_DATA.referralFacility) {
-
-            
-            const arrowXPath = `//android.widget.Spinner[@text="Referral Facility" or @hint="Referral Facility"]/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
-            const dropdownArrow = await driver.$(arrowXPath);
-
-            if (await dropdownArrow.isExisting()) {
-
-                
-                await dropdownArrow.click();
-                await driver.pause(1000);
-
-                
-                if (await driver.isKeyboardShown()) {
-                    console.log('Keyboard opened unexpectedly. Closing keyboard and retrying dropdown click...');
-                    await driver.hideKeyboard();
-                    await driver.pause(1000); 
-
-                    
-                    await dropdownArrow.click();
-                    await driver.pause(1500); 
-                } else {
-                    
-                    await driver.pause(500);
-                }
-
-                
-                const REFERRAL_FACILITY_COORDS = {
-                    'Primary Health Centre':   { x: 500, y: 1500 },
-                    'Community Health Centre': { x: 500, y: 1590 },
-                    'District Hospital':       { x: 500, y: 1680 },
-                    'Other Private Hospital':  { x: 500, y: 1770 }
-                };
-
-                const coords = REFERRAL_FACILITY_COORDS[FORM_DATA.referralFacility];
-
-                if (coords) {
-                    await tapAt(driver, coords.x, coords.y);
-                    console.log(`✔ Referral Facility updated to "${FORM_DATA.referralFacility}".`);
-                } else {
-                    console.error(`❌ Option "${FORM_DATA.referralFacility}" not found in coordinate map.`);
-                }
-            } else {
-                console.error('❌ Could not find the dropdown arrow for Referral Facility.');
-            }
-
-        } else {
-            console.log(`➡ Referral Facility is already set to "${FORM_DATA.referralFacility}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Referral Facility" dropdown field.');
-    }
-}
-
-async function fillHrpConfirmed(driver) {
-    console.log('Processing "Is HRP Confirmed?"...');
-    await scrollDownToText(driver, "Is HRP Confirmed?", 3);
-
-    const radioXPath = `//android.widget.TextView[@text="Is HRP Confirmed?"]/parent::android.widget.LinearLayout/following-sibling::android.widget.RadioGroup/android.widget.RadioButton[@text="${FORM_DATA.hrpConfirmed}"]`;
-    const radioButton = await driver.$(radioXPath);
-
-    if (await radioButton.isExisting()) {
-        const isChecked = await radioButton.getAttribute('checked');
-        if (isChecked !== 'true') {
-            await radioButton.click();
-            console.log(`✔ "Is HRP Confirmed?" set to "${FORM_DATA.hrpConfirmed}".`);
-        } else {
-            console.log(`➡ "Is HRP Confirmed?" is already set to "${FORM_DATA.hrpConfirmed}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Is HRP Confirmed?" radio buttons.');
-    }
-}
-
-async function fillIdentifiedAsHrp(driver) {
-    console.log('Processing "Who had identified as HRP?"...');
-
-    
-    await scrollDownToText(driver, "Who had identified as HRP?", 2);
-
-    const spinnerXPath = `//android.widget.Spinner[contains(@text, "Who had identified as HRP?") or contains(@hint, "Who had identified as HRP?")]`;
-    const spinner = await driver.$(spinnerXPath);
-
-    if (await spinner.isExisting()) {
-        const currentText = await spinner.getText();
-
-        if (currentText !== FORM_DATA.identifiedAsHrp) {
-
-            
-            const arrowXPath = `${spinnerXPath}/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
-            const dropdownArrow = await driver.$(arrowXPath);
-
-            if (await dropdownArrow.isExisting()) {
-
-                
-                await dropdownArrow.click();
-                await driver.pause(1000);
-
-                
-                if (await driver.isKeyboardShown()) {
-                    console.log('Keyboard opened unexpectedly. Closing keyboard and retrying dropdown click...');
-                    await driver.hideKeyboard();
-                    await driver.pause(1000);
-
-                    await dropdownArrow.click();
-                    await driver.pause(1500);
-                } else {
-                    await driver.pause(500);
-                }
-
-                
-                
-                const IDENTIFIED_AS_HRP_COORDS = {
-                    'ANM':                           { x: 500, y: 1770 },
-                    'CHO':                           { x: 500, y: 1880 },
-                    'PHC - MO':                      { x: 500, y: 1990 },
-                    'Specialist at Higher Facility': { x: 500, y: 2100 }
-                };
-
-                const coords = IDENTIFIED_AS_HRP_COORDS[FORM_DATA.identifiedAsHrp];
-
-                if (coords) {
-                    await tapAt(driver, coords.x, coords.y);
-                    console.log(`✔ "Who had identified as HRP?" updated to "${FORM_DATA.identifiedAsHrp}".`);
-                } else {
-                    console.error(`❌ Option "${FORM_DATA.identifiedAsHrp}" not found in coordinate map.`);
-                }
-            } else {
-                console.error('❌ Could not find the dropdown arrow for "Who had identified as HRP?".');
-            }
-        } else {
-            console.log(`➡ "Who had identified as HRP?" is already set to "${FORM_DATA.identifiedAsHrp}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Who had identified as HRP?" dropdown field.');
-    }
-}
-
-async function fillReferralFacilityHighRiskNo(driver) {
-    console.log('Processing Referral Facility Dropdown (High Risk = No)...');
-
-    
-    await scrollDownToText(driver, "Referral Facility", 2);
-
-    const spinner = await driver.$('//android.widget.Spinner[@text="Referral Facility" or @hint="Referral Facility"]');
-
-    if (await spinner.isExisting()) {
-        const currentText = await spinner.getText();
-
-        if (currentText !== FORM_DATA.referralFacility) {
-
-            
-            const arrowXPath = `//android.widget.Spinner[@text="Referral Facility" or @hint="Referral Facility"]/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
-            const dropdownArrow = await driver.$(arrowXPath);
-
-            if (await dropdownArrow.isExisting()) {
-
-                
-                await dropdownArrow.click();
-                await driver.pause(1000);
-
-                
-                if (await driver.isKeyboardShown()) {
-                    console.log('Keyboard opened unexpectedly. Closing keyboard and retrying dropdown click...');
-                    await driver.hideKeyboard();
-                    await driver.pause(1000);
-
-                    
-                    await dropdownArrow.click();
-                    await driver.pause(1500);
-                } else {
-                    await driver.pause(500);
-                }
-
-                
-                
-                const REFERRAL_FACILITY_NO_RISK_COORDS = {
-                    'Primary Health Centre':   { x: 500, y: 1720 }, 
-                    'Community Health Centre': { x: 500, y: 1830 },
-                    'District Hospital':       { x: 500, y: 1940 },
-                    'Other Private Hospital':  { x: 500, y: 2050 }  
-                };
-
-                const coords = REFERRAL_FACILITY_NO_RISK_COORDS[FORM_DATA.referralFacility];
-
-                if (coords) {
-                    await tapAt(driver, coords.x, coords.y);
-                    console.log(`✔ Referral Facility updated to "${FORM_DATA.referralFacility}".`);
-                } else {
-                    console.error(`❌ Option "${FORM_DATA.referralFacility}" not found in coordinate map.`);
-                }
-            } else {
-                console.error('❌ Could not find the dropdown arrow for Referral Facility.');
-            }
-
-        } else {
-            console.log(`➡ Referral Facility is already set to "${FORM_DATA.referralFacility}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Referral Facility" dropdown field.');
-    }
-}
-
-async function fillProbableCauseOfDeath(driver) {
-    console.log('Processing Probable Cause of Death Dropdown...');
-
-    
-    await scrollDownToText(driver, "Probable Cause of Death", 2);
-
-    const spinnerXPath = `//android.widget.Spinner[contains(@text, "Probable Cause of Death") or contains(@hint, "Probable Cause of Death")]`;
-    const spinner = await driver.$(spinnerXPath);
-
-    if (await spinner.isExisting()) {
-        const currentText = await spinner.getText();
-
-        if (currentText !== FORM_DATA.probableCauseOfDeath) {
-
-            
-            const arrowXPath = `${spinnerXPath}/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
-            const dropdownArrow = await driver.$(arrowXPath);
-
-            if (await dropdownArrow.isExisting()) {
-
-                
-                await dropdownArrow.click();
-                await driver.pause(1000);
-
-                
-                if (await driver.isKeyboardShown()) {
-                    console.log('Keyboard opened unexpectedly. Closing keyboard and retrying dropdown click...');
-                    await driver.hideKeyboard();
-                    await driver.pause(1000);
-
-                    
-                    await dropdownArrow.click();
-                    await driver.pause(1500);
-                } else {
-                    await driver.pause(500);
-                }
-
-                
-                const CAUSE_OF_DEATH_COORDS = {
-                    'ECLAMPSIA':   { x: 500, y: 1350 },
-                    'HAEMORRHAGE': { x: 500, y: 1460 },
-                    'HIGH FEVER':  { x: 500, y: 1570 },
-                    'ABORTION':    { x: 500, y: 1680 },
-                    'Accident':    { x: 500, y: 1790 },
-                    'OTHER':       { x: 500, y: 1900 }
-                };
-
-                const coords = CAUSE_OF_DEATH_COORDS[FORM_DATA.probableCauseOfDeath];
-
-                if (coords) {
-                    await tapAt(driver, coords.x, coords.y);
-                    console.log(`✔ Probable Cause of Death updated to "${FORM_DATA.probableCauseOfDeath}".`);
-                } else {
-                    console.error(`❌ Option "${FORM_DATA.probableCauseOfDeath}" not found in coordinate map.`);
-                }
-            } else {
-                console.error('❌ Could not find the dropdown arrow for Probable Cause of Death.');
-            }
-
-        } else {
-            console.log(`➡ Probable Cause of Death is already set to "${FORM_DATA.probableCauseOfDeath}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Probable Cause of Death" dropdown field.');
+        console.error('❌ "Is the Pregnant Woman alive?" radio not found.');
     }
 }
 
 async function fillDeathDate(driver) {
-    console.log('Processing Death Date...');
-
-    
-    await scrollDownToText(driver, "Death Date", 2);
-
-    const field = await driver.$('//android.widget.EditText[@text="Death Date *" or @hint="Death Date *"]');
-
+    console.log('Processing Death Date…');
+    await scrollDownToText(driver, 'Date of death', 2);
+    const field = await driver.$(
+        '//android.widget.EditText[@text="Date of death *" or @hint="Date of death *"' +
+        ' or @text="Death Date *" or @hint="Death Date *"]'
+    );
     if (await field.isExisting() && await field.isDisplayed()) {
-        if (await isEmpty(field, 'Death Date *')) {
+        const current = (await field.getText() || '').trim();
+        if (!current || current.includes('Date of death') || current.includes('Death Date')) {
             await field.click();
-            await driver.pause(1000); 
-
-            
+            await driver.pause(1000);
             await pickDateFromCalendar(driver, FORM_DATA.deathDate);
-            console.log('✔ Death Date filled successfully.');
-        } else {
-            console.log('➡ Death Date is already filled.');
-        }
+        } else { console.log('➡  Death Date already filled.'); }
     } else {
-        console.error('❌ Could not find "Death Date" field.');
+        console.error('❌ Death Date field not found.');
     }
 }
 
-async function fillPlaceOfDeath(driver) {
-    console.log('Processing Place of Death Dropdown...');
-
-    
-    await scrollDownToText(driver, "Place of Death", 2);
-
-    const spinnerXPath = `//android.widget.Spinner[contains(@text, "Place of Death") or contains(@hint, "Place of Death")]`;
-    const spinner = await driver.$(spinnerXPath);
-
-    if (await spinner.isExisting()) {
-        const currentText = await spinner.getText();
-
-        if (currentText !== FORM_DATA.placeOfDeath) {
-
-            
-            const arrowXPath = `${spinnerXPath}/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
-            const dropdownArrow = await driver.$(arrowXPath);
-
-            if (await dropdownArrow.isExisting()) {
-
-                
-                await dropdownArrow.click();
-                await driver.pause(1000);
-
-                
-                if (await driver.isKeyboardShown()) {
-                    console.log('Keyboard opened unexpectedly. Closing keyboard and retrying dropdown click...');
-                    await driver.hideKeyboard();
-                    await driver.pause(1000);
-
-                    
-                    await dropdownArrow.click();
-                    await driver.pause(1500);
-                } else {
-                    await driver.pause(500);
-                }
-
-                
-                
-                const PLACE_OF_DEATH_COORDS = {
-                    'Home':                     { x: 500, y: 560 }, 
-                    'Subcenter':                { x: 500, y: 660 },
-                    'PHC':                      { x: 500, y: 760 },
-                    'CHC':                      { x: 500, y: 860 },
-                    'District Hospital':        { x: 500, y: 960 },
-                    'Medical College Hospital': { x: 500, y: 1060 },
-                    'Private Hospital':         { x: 500, y: 1160 },
-                    'In Transit':               { x: 500, y: 1260 },
-                    'Other Place of Death':     { x: 500, y: 1360 } 
-                };
-
-                const coords = PLACE_OF_DEATH_COORDS[FORM_DATA.placeOfDeath];
-
-                if (coords) {
-                    await tapAt(driver, coords.x, coords.y);
-                    console.log(`✔ Place of Death updated to "${FORM_DATA.placeOfDeath}".`);
-                } else {
-                    console.error(`❌ Option "${FORM_DATA.placeOfDeath}" not found in coordinate map.`);
-                }
-            } else {
-                console.error('❌ Could not find the dropdown arrow for Place of Death.');
-            }
-
-        } else {
-            console.log(`➡ Place of Death is already set to "${FORM_DATA.placeOfDeath}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Place of Death" dropdown field.');
+async function fillHasDelivered(driver) {
+    console.log('Processing "Has the pregnant woman delivered?"…');
+    await scrollDownToText(driver, 'Has the pregnant woman delivered?', 2);
+    const xpath =
+        `//android.widget.TextView[@text="Has the pregnant woman delivered?"]` +
+        `/parent::android.widget.LinearLayout` +
+        `/following-sibling::android.widget.RadioGroup` +
+        `/android.widget.RadioButton[@text="${FORM_DATA.delivered}"]`;
+    const btn = await driver.$(xpath);
+    if (await btn.isExisting()) {
+        if ((await btn.getAttribute('checked')) !== 'true') {
+            await btn.click();
+            console.log(`✔ Delivered set to "${FORM_DATA.delivered}".`);
+        } else { console.log('➡  Already set.'); }
     }
 }
 
-async function fillOtherPlaceOfDeath(driver) {
-    console.log('Checking for "Other Place of Death" text field...');
+async function fillHighRisk(driver) {
+    console.log('Processing "Any High Risk conditions"…');
+    await scrollDownToText(driver, 'Any High Risk conditions', 3);
+    const xpath =
+        `//android.widget.TextView[@text="Any High Risk conditions"]` +
+        `/parent::android.widget.LinearLayout` +
+        `/following-sibling::android.widget.RadioGroup` +
+        `/android.widget.RadioButton[@text="${FORM_DATA.highRisk}"]`;
+    const btn = await driver.$(xpath);
+    if (await btn.isExisting()) {
+        if ((await btn.getAttribute('checked')) !== 'true') {
+            await btn.click();
+            console.log(`✔ High Risk set to "${FORM_DATA.highRisk}".`);
+            await driver.pause(1000);
+        } else { console.log('➡  Already set.'); }
+    }
+}
 
-    
-    await scrollDownToText(driver, "Other Place of Death", 2);
-
-    const otherField = await driver.$('//android.widget.EditText[contains(@hint, "Other Place of Death") or contains(@text, "Other Place of Death")]');
-
-    if (await otherField.isExisting() && await otherField.isDisplayed()) {
-        const currentText = await otherField.getText();
-
-        if (currentText !== FORM_DATA.otherPlaceOfDeath && await isEmpty(otherField, "Other Place of Death *")) {
-            await otherField.click();
-            await otherField.clearValue();
-            await otherField.setValue(FORM_DATA.otherPlaceOfDeath);
-
-            if (await driver.isKeyboardShown()) {
-                await driver.hideKeyboard();
-            }
-            console.log(`✔ "Other Place of Death" text filled with "${FORM_DATA.otherPlaceOfDeath}".`);
-        } else {
-            console.log(`➡ "Other Place of Death" text is already set to "${FORM_DATA.otherPlaceOfDeath}".`);
-        }
-    } else {
-        console.log('➡ "Other Place of Death" field not shown, skipping to next.');
+async function fillHrpConfirmed(driver) {
+    console.log('Processing "Is HRP Confirmed?"…');
+    await scrollDownToText(driver, 'Is HRP Confirmed?', 3);
+    const xpath =
+        `//android.widget.TextView[@text="Is HRP Confirmed?"]` +
+        `/parent::android.widget.LinearLayout` +
+        `/following-sibling::android.widget.RadioGroup` +
+        `/android.widget.RadioButton[@text="${FORM_DATA.hrpConfirmed}"]`;
+    const btn = await driver.$(xpath);
+    if (await btn.isExisting()) {
+        if ((await btn.getAttribute('checked')) !== 'true') {
+            await btn.click();
+            console.log(`✔ HRP Confirmed set to "${FORM_DATA.hrpConfirmed}".`);
+            await driver.pause(1000);
+        } else { console.log('➡  Already set.'); }
     }
 }
 
 async function uploadMcpCard(driver, sideName) {
-    console.log(`Processing MCP Card (${sideName})...`);
-
-    
+    console.log(`Processing MCP Card (${sideName})…`);
     await scrollDownToText(driver, sideName, 2);
-
-    
-    const addFileBtn = await driver.$(`//android.widget.TextView[@text="${sideName}"]/following-sibling::android.widget.ImageView[@content-desc="add file"]`);
-
+    const addFileBtn = await driver.$(
+        `//android.widget.TextView[@text="${sideName}"]` +
+        `/following-sibling::android.widget.ImageView[@content-desc="add file"]`
+    );
     if (await addFileBtn.isExisting() && await addFileBtn.isDisplayed()) {
         await addFileBtn.click();
-        await driver.pause(1500); 
-
-        
-        const galleryBtn = await driver.$('//android.widget.Button[@text="Pick from Gallery" or @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btnGallery"]');
-
+        await driver.pause(1500);
+        const galleryBtn = await driver.$(
+            '//android.widget.Button[@text="Pick from Gallery"] | ' +
+            '//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btnGallery"]'
+        );
         if (await galleryBtn.isExisting()) {
             await galleryBtn.click();
-            console.log(`✔ Clicked "Pick from Gallery" for ${sideName}. Waiting 20 seconds...`);
-
-            
+            console.log(`✔ Clicked "Pick from Gallery" for ${sideName}. Waiting 20 s…`);
             await driver.pause(20000);
-        } else {
-            console.error(`❌ Could not find "Pick from Gallery" button for ${sideName}.`);
         }
-    } else {
-        console.error(`❌ Could not find "add file" button for ${sideName}.`);
     }
 }
 
 async function clickSubmitButton(driver) {
-    console.log('Clicking Submit button...');
-
-    await scrollDownToText(driver, "Submit", 2);
-    const submitBtn = await driver.$('//android.widget.Button[@text="Submit" or @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_submit"]');
-
-    if (await submitBtn.isExisting()) {
-        await submitBtn.click();
-        console.log('✔ Submit button clicked successfully!');
+    console.log('Clicking Submit…');
+    await scrollDownToText(driver, 'Submit', 2);
+    const btn = await driver.$(
+        '//android.widget.Button[@text="Submit"] | ' +
+        '//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_submit"]'
+    );
+    if (await btn.isExisting()) {
+        await btn.click();
+        await driver.pause(3000);
+        console.log('✔ Submit clicked.');
     } else {
-        console.error('❌ Could not find the Submit button.');
+        throw new Error('❌ Submit button not found.');
     }
 }
+
+
+// ─────────────────────────────────────────────────────────────
+//  MAIN ORCHESTRATOR
+// ─────────────────────────────────────────────────────────────
+
 async function fillAncForm(driver) {
+    const isDeceased = FORM_DATA.isWomanAlive === 'No';
+
     await fillAncDate(driver);
-    await driver.pause(1000);
-
-    await fillPlaceOfAnc(driver);
-    await driver.pause(1000);
-
-    await fillAncPeriod(driver);
-    await driver.pause(1000);
-
+    await fillAbortionSection(driver);
     await fillMaternalDeath(driver);
-    await driver.pause(1000);
 
-    if (FORM_DATA.maternalDeath === 'Yes') {
-        
-        await fillProbableCauseOfDeath(driver);
-        await driver.pause(1000);
-        await fillDeathDate(driver); 
-        await driver.pause(1000);
-        await fillPlaceOfDeath(driver);
-        await driver.pause(1000);
-        await fillOtherPlaceOfDeath(driver);
-        await driver.pause(1000);
-        await fillFundalHeight(driver);
-        await driver.pause(1000);
-    } else if (FORM_DATA.maternalDeath === 'No') {
+    if (isDeceased) {
+        await selectReasonForDeath(driver, FORM_DATA.probableCauseOfDeath);
+        await fillDeathDate(driver);
+        await selectPlaceOfDeath(driver, FORM_DATA.placeOfDeath);
+
+        if (FORM_DATA.placeOfDeath === 'Other Place of Death') {
+            await fillTextInput(
+                driver,
+                'Other Place of Death',
+                FORM_DATA.otherPlaceOfDeath,
+                'Other Place of Death'
+            );
+        }
+
+        await selectPlaceOfAnc(driver, FORM_DATA.placeOfAnc);
+        await selectAncPeriod(driver, FORM_DATA.ancPeriod);
+        await fillTextInput(driver, 'No. of IFA Tabs given', FORM_DATA.ifaTabs);
+        await fillTextInput(driver, 'Fundal Height',         FORM_DATA.fundalHeight);
+
+    } else {
+        await selectPlaceOfAnc(driver, FORM_DATA.placeOfAnc);
+        await selectAncPeriod(driver, FORM_DATA.ancPeriod);
+
+        // ⬇️ --- CHANGED PART: MOVED HERE --- ⬇️
+        await fillTextInput(driver, 'No. of IFA Tabs given', FORM_DATA.ifaTabs);
+        await fillTextInput(driver, 'Fundal Height',         FORM_DATA.fundalHeight);
+        // ⬆️ -------------------------------- ⬆️
 
         await fillHasDelivered(driver);
-        await driver.pause(1000);
+        await fillTextInput(driver, 'Weight of PW',          FORM_DATA.weight);
+        await fillTextInput(driver, 'BP of PW',              FORM_DATA.bp);
+        await fillTextInput(driver, 'HB',                    FORM_DATA.hb);
 
-        await fillWeight(driver);
-        await driver.pause(1000);
-
-        await fillBp(driver);
-        await driver.pause(1000);
-        await fillHb(driver);
-        await driver.pause(1000);
-        await fillFundalHeight(driver);
-        await driver.pause(1000);
-        
-        await fillIfaTabs(driver);
-        await driver.pause(1000);
         await fillHighRisk(driver);
-        await driver.pause(1000);
         if (FORM_DATA.highRisk === 'Yes') {
-            await fillHighRiskConditionDropdown(driver);
-            await driver.pause(1000);
-            await fillOtherHighRiskCondition(driver);
-            await driver.pause(1000);
-            await fillReferralFacility(driver);
-            await driver.pause(1000);
-        } else {
-            
-            
-            await fillReferralFacilityHighRiskNo(driver);
-            await driver.pause(1000);
+            await selectHighRiskCondition(driver, FORM_DATA.highRiskCondition);
+            await fillTextInput(driver, 'Any other High Risk', FORM_DATA.otherHighRisk);
         }
 
-        
+        await selectReferralFacility(driver, FORM_DATA.referralFacility);
         await fillHrpConfirmed(driver);
-        await driver.pause(1000);
         if (FORM_DATA.hrpConfirmed === 'Yes') {
-            await fillIdentifiedAsHrp(driver);
-            await driver.pause(1000);
+            await selectIdentifiedAsHrp(driver, FORM_DATA.identifiedAsHrp);
         }
     }
-    await uploadMcpCard(driver, "Front Side");
-    await driver.pause(1000);
 
-    
-    await uploadMcpCard(driver, "Back Side");
-    await driver.pause(1000);
-
-    
+    await uploadMcpCard(driver, 'Front Side');
+    await uploadMcpCard(driver, 'Back Side');
     await clickSubmitButton(driver);
 }
 

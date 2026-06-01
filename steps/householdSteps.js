@@ -3,23 +3,23 @@
 // householdSteps.js
 
 async function clickAllHousehold(driver) {
-  // Wait for the Home/Dashboard screen to load and target the specific text
-  const allHousehold = await driver.$('//android.widget.TextView[contains(@text, "Household")]');
+  // Use the resource-id instead of @text.
+  // From your XML, look for the ID of the "All Household" card (cv_icon / textView2)
+  // Let's target the card container directly:
+  const allHousehold = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/cv_icon").index(0)');
 
-  // Wait for it to be visible before clicking
-  await allHousehold.waitForDisplayed({ timeout: 15000 });
-  await allHousehold.click();
-  console.log("✅ Clicked on All Household");
+  await allHousehold.waitForDisplayed({ timeout: 15000 });
+  await allHousehold.click();
+  console.log("✅ Clicked on All Household card");
 }
 
 async function clickNewHouseholdRegistration(driver) {
-  const newHouseholdBtn = await driver.$(
-    'id=org.piramalswasthya.sakhi.saksham.uat:id/btn_next_page'
-  );
+  // Use resource ID which is language agnostic
+  const newHouseholdBtn = await driver.$('id=org.piramalswasthya.sakhi.saksham.uat:id/btn_next_page');
 
-  await newHouseholdBtn.waitForDisplayed({ timeout: 10000 });
-  await newHouseholdBtn.click();
-  console.log("✅ Clicked on New Household Registration");
+  await newHouseholdBtn.waitForDisplayed({ timeout: 10000 });
+  await newHouseholdBtn.click();
+  console.log("✅ Clicked on New Household Registration");
 }
 
 async function acceptConsent(driver) {
