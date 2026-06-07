@@ -3,7 +3,7 @@ const { remote } = require('webdriverio');
 // ── Configuration & Data ──────────────────────────────────────────────────────
 
 const FORM_DATA = {
-    visitDate: { day: 15, month: 11, year: 2025 },
+    visitDate: { day: 2, month: 6, year: 2026 },
     serialNumber: '12345',
     methodOfTermination: 'MVA',
     terminationDoneBy: 'Doctor',
@@ -18,32 +18,155 @@ const MONTH_NAMES = [
     'October', 'November', 'December'
 ];
 
-const METHOD_OF_TERMINATION_COORDS = {
-    'MVA': { x: 500, y: 1500 },
-    'EVA': { x: 500, y: 1630 },
-    'MMA': { x: 500, y: 1760 },
-    'Others': { x: 500, y: 1890 }
-};
+// ── Robust Dropdown & Touch Helpers ───────────────────────────────────────────
 
-const TERMINATION_DONE_BY_COORDS = {
-    'Doctor': { x: 500, y: 1630 },
-    'Nurse': { x: 500, y: 1740 }
-};
+async function scrollSpinnerToMiddle(driver, spinnerSelector) {
+    try {
+        const spinner = await driver.$(spinnerSelector);
+        const loc = await spinner.getLocation();
+        const screen = await driver.getWindowRect();
+        const midY = screen.height / 2;
 
-// ── Touch & Scroll Helpers ────────────────────────────────────────────────────
+        if (loc.y > midY + 100) {
+            console.log(`⬆️  Spinner at y=${loc.y}, scrolling toward middle...`);
+            const startY = Math.floor(screen.height * 0.7);
+            const endY = Math.floor(screen.height * 0.3);
+            const swipeX = Math.floor(screen.width / 2);
 
-async function tapAt(driver, x, y) {
+            await driver.performActions([{
+                type: 'pointer', id: 'finger1',
+                parameters: { pointerType: 'touch' },
+                actions: [
+                    { type: 'pointerMove', duration: 0, x: swipeX, y: startY },
+                    { type: 'pointerDown', button: 0 },
+                    { type: 'pause', duration: 200 },
+                    { type: 'pointerMove', duration: 1000, x: swipeX, y: endY },
+                    { type: 'pointerUp', button: 0 }
+                ]
+            }]);
+            await driver.releaseActions();
+            await driver.pause(1500);
+        }
+    } catch (e) {
+        console.log('⚠️  scrollSpinnerToMiddle skipped:', e.message);
+    }
+}
+
+async function tapByCoords(driver, tapX, tapY) {
     await driver.performActions([{
-        type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
+        type: 'pointer', id: 'finger1',
+        parameters: { pointerType: 'touch' },
         actions: [
-            { type: 'pointerMove', duration: 0, x, y },
+            { type: 'pointerMove', duration: 0, x: tapX, y: tapY },
             { type: 'pointerDown', button: 0 },
-            { type: 'pause', duration: 100 },
-            { type: 'pointerUp', button: 0 },
-        ],
+            { type: 'pause',       duration: 150 },
+            { type: 'pointerUp',   button: 0 }
+        ]
     }]);
     await driver.releaseActions();
+    await driver.pause(500);
 }
+
+async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optionsList) {
+    await scrollSpinnerToMiddle(driver, spinnerSelector);
+
+    const spinner = await driver.$(spinnerSelector);
+    await spinner.waitForDisplayed({ timeout: 10000 });
+
+    const loc  = await spinner.getLocation();
+    const size = await spinner.getSize();
+    console.log(`📍 Spinner @ (${loc.x}, ${loc.y}), size (${size.width}x${size.height})`);
+
+    const tapX = Math.floor(loc.x + size.width - 40);
+    const tapY = Math.floor(loc.y + size.height / 2);
+
+    console.log(`📍 Tapping dropdown arrow at (${tapX}, ${tapY})`);
+    await tapByCoords(driver, tapX, tapY);
+    await driver.pause(2000);
+
+    try {
+        const item = await driver.$(`//*[@text="${value}"]`);
+        await item.waitForDisplayed({ timeout: 4000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via XPath`);
+        return;
+    } catch (e) { console.log(`⚠️  XPath strategy failed: ${e.message}`); }
+
+    try {
+        const item = await driver.$(`android=new UiSelector().text("${value}")`);
+        await item.waitForDisplayed({ timeout: 3000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via UiSelector`);
+        return;
+    } catch (e) { console.log(`⚠️  UiSelector strategy failed: ${e.message}`); }
+
+    try {
+        const source = await driver.getPageSource();
+        const nodes = source.match(/<[^>]+>/g) || [];
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const textRegex = new RegExp(`(?:text|content-desc)="\\s*${escapedValue}\\s*"`);
+        let foundNode = null;
+
+        for (const node of nodes) {
+            if (textRegex.test(node) && node.includes('bounds=')) {
+                foundNode = node;
+                break;
+            }
+        }
+
+        if (foundNode) {
+            const boundsMatch = foundNode.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            if (boundsMatch) {
+                const tapX = Math.floor((parseInt(boundsMatch[1]) + parseInt(boundsMatch[3])) / 2);
+                const tapY = Math.floor((parseInt(boundsMatch[2]) + parseInt(boundsMatch[4])) / 2);
+                console.log(`📍 Found "${value}" in XML (tag parse) → tap(${tapX},${tapY})`);
+                await tapByCoords(driver, tapX, tapY);
+                console.log(`✅ Selected "${value}" via tag parse`);
+                return;
+            }
+        }
+    } catch (e) { console.log(`⚠️  Tag parse failed: ${e.message}`); }
+
+    try {
+        const source = await driver.getPageSource();
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`text="${escapedValue}"[^/]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`);
+        const match = source.match(regex);
+
+        if (match) {
+            const tapX = Math.floor((parseInt(match[1]) + parseInt(match[3])) / 2);
+            const tapY = Math.floor((parseInt(match[2]) + parseInt(match[4])) / 2);
+            console.log(`📍 Found "${value}" via regex → tap(${tapX},${tapY})`);
+            await tapByCoords(driver, tapX, tapY);
+            console.log(`✅ Selected "${value}" via regex`);
+            return;
+        }
+    } catch (e) { console.log(`⚠️  Regex strategy failed: ${e.message}`); }
+
+    const screen = await driver.getWindowRect();
+    const idx = optionsList.indexOf(value);
+    if (idx === -1) throw new Error(`"${value}" not in list: [${optionsList.join(', ')}]`);
+
+    const rowHeight     = size.height;
+    const spinnerBottom = loc.y + size.height;
+    const opensUpward   = (screen.height - spinnerBottom) < (optionsList.length * rowHeight);
+    const finalTapX     = Math.floor(loc.x + size.width / 2);
+    let   finalTapY;
+
+    if (opensUpward) {
+        const reversedIdx = (optionsList.length - 1) - idx;
+        finalTapY = Math.floor(loc.y - (reversedIdx * rowHeight) - (rowHeight / 2));
+    } else {
+        finalTapY = Math.floor(spinnerBottom + (idx * rowHeight) + (rowHeight / 2));
+    }
+    finalTapY = Math.max(5, Math.min(finalTapY, screen.height - 5));
+
+    console.log(`📍 Coordinate fallback → tap(${finalTapX}, ${finalTapY})`);
+    await tapByCoords(driver, finalTapX, finalTapY);
+    console.log(`✅ Selected "${value}" via coordinates`);
+}
+
+// ── General Scroll & UI Helpers ───────────────────────────────────────────────
 
 async function swipeHorizontal(driver, direction) {
     const size = await driver.getWindowRect();
@@ -170,26 +293,25 @@ async function fillVisitDate(driver) {
 
 async function fillSerialNumber(driver) {
     console.log('Processing Serial Number...');
-    const hintText = "Serial no as per Admission/ Evacuation register";
 
-    await scrollDownToText(driver, "Serial no as per", 2);
-    const serialField = await driver.$('//android.widget.EditText[contains(@hint, "Serial no as per")]');
+    // Scroll element into view using exact matching text
+    const scrollable = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Serial no as per Admission"))`;
+    await driver.$(`android=${scrollable}`).catch(() => {});
+    await driver.pause(1000);
+
+    // Target the EditText using either the text or hint attribute, depending on how Android rendered it when empty
+    const serialField = await driver.$('//android.widget.EditText[contains(@text, "Serial no as per Admission") or contains(@hint, "Serial no as per Admission")]');
 
     if (await serialField.isExisting()) {
-        const currentText = await serialField.getText();
+        await serialField.waitForDisplayed({ timeout: 5000 });
+        await serialField.click();
+        await serialField.clearValue();
+        await serialField.setValue(FORM_DATA.serialNumber);
 
-        if (currentText !== FORM_DATA.serialNumber && await isEmpty(serialField, hintText)) {
-            await serialField.click();
-            await serialField.clearValue();
-            await serialField.setValue(FORM_DATA.serialNumber);
-
-            if (await driver.isKeyboardShown()) {
-                await driver.hideKeyboard();
-            }
-            console.log(`✔ Serial Number set to "${FORM_DATA.serialNumber}".`);
-        } else {
-            console.log(`➡ Serial Number is already set or matches "${FORM_DATA.serialNumber}".`);
+        if (await driver.isKeyboardShown()) {
+            await driver.hideKeyboard();
         }
+        console.log(`✔ Serial Number set to "${FORM_DATA.serialNumber}".`);
     } else {
         console.error('❌ Could not find the "Serial no" input field.');
     }
@@ -197,92 +319,46 @@ async function fillSerialNumber(driver) {
 
 async function fillMethodOfTermination(driver) {
     console.log('Processing Method of Termination Dropdown...');
-    await scrollDownToText(driver, "Method of Termination", 2);
 
+    // Scroll specifically to the dropdown element text
+    const scrollable = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Method of Termination"))`;
+    await driver.$(`android=${scrollable}`).catch(() => {});
+    await driver.pause(1000);
+
+    const optionsList = ['MVA', 'EVA', 'MMA', 'Others'];
+
+    // Target the spinner holding "Method of Termination"
     const spinnerXPath = `//android.widget.Spinner[contains(@text, "Method of Termination") or contains(@hint, "Method of Termination")]`;
-    const spinner = await driver.$(spinnerXPath);
 
-    if (await spinner.isExisting()) {
-        const currentText = await spinner.getText();
-
-        if (currentText !== FORM_DATA.methodOfTermination) {
-            const arrowXPath = `${spinnerXPath}/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
-            const dropdownArrow = await driver.$(arrowXPath);
-
-            if (await dropdownArrow.isExisting()) {
-                await dropdownArrow.click();
-                await driver.pause(1000);
-
-                if (await driver.isKeyboardShown()) {
-                    await driver.hideKeyboard();
-                    await driver.pause(1000);
-                    await dropdownArrow.click(); // retry opening
-                    await driver.pause(1500);
-                } else {
-                    await driver.pause(500);
-                }
-
-                const coords = METHOD_OF_TERMINATION_COORDS[FORM_DATA.methodOfTermination];
-                if (coords) {
-                    await tapAt(driver, coords.x, coords.y);
-                    console.log(`✔ "Method of Termination" updated to "${FORM_DATA.methodOfTermination}".`);
-                } else {
-                    console.error(`❌ Option "${FORM_DATA.methodOfTermination}" not found in coordinate map.`);
-                }
-            } else {
-                console.error('❌ Could not find the dropdown arrow for "Method of Termination".');
-            }
-        } else {
-            console.log(`➡ "Method of Termination" is already set to "${FORM_DATA.methodOfTermination}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Method of Termination" dropdown field.');
-    }
+    await clickSpinnerAndSelectOption(
+        driver,
+        spinnerXPath,
+        FORM_DATA.methodOfTermination,
+        optionsList
+    );
+    console.log(`✅ "Method of Termination" set to "${FORM_DATA.methodOfTermination}".`);
 }
 
 async function fillTerminationDoneBy(driver) {
     console.log('Processing Termination Done By Dropdown...');
-    await scrollDownToText(driver, "Termination done by", 2);
 
+    // Scroll specifically to the dropdown element text
+    const scrollable = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Termination done by"))`;
+    await driver.$(`android=${scrollable}`).catch(() => {});
+    await driver.pause(1000);
+
+    const optionsList = ['Doctor', 'Nurse'];
+
+    // Target the spinner holding "Termination done by"
     const spinnerXPath = `//android.widget.Spinner[contains(@text, "Termination done by") or contains(@hint, "Termination done by")]`;
-    const spinner = await driver.$(spinnerXPath);
 
-    if (await spinner.isExisting()) {
-        const currentText = await spinner.getText();
-
-        if (currentText !== FORM_DATA.terminationDoneBy) {
-            const arrowXPath = `${spinnerXPath}/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
-            const dropdownArrow = await driver.$(arrowXPath);
-
-            if (await dropdownArrow.isExisting()) {
-                await dropdownArrow.click();
-                await driver.pause(1000);
-
-                if (await driver.isKeyboardShown()) {
-                    await driver.hideKeyboard();
-                    await driver.pause(1000);
-                    await dropdownArrow.click(); // retry opening
-                    await driver.pause(1500);
-                } else {
-                    await driver.pause(500);
-                }
-
-                const coords = TERMINATION_DONE_BY_COORDS[FORM_DATA.terminationDoneBy];
-                if (coords) {
-                    await tapAt(driver, coords.x, coords.y);
-                    console.log(`✔ "Termination done by" updated to "${FORM_DATA.terminationDoneBy}".`);
-                } else {
-                    console.error(`❌ Option "${FORM_DATA.terminationDoneBy}" not found in coordinate map.`);
-                }
-            } else {
-                console.error('❌ Could not find the dropdown arrow for "Termination done by".');
-            }
-        } else {
-            console.log(`➡ "Termination done by" is already set to "${FORM_DATA.terminationDoneBy}".`);
-        }
-    } else {
-        console.error('❌ Could not find "Termination done by" dropdown field.');
-    }
+    await clickSpinnerAndSelectOption(
+        driver,
+        spinnerXPath,
+        FORM_DATA.terminationDoneBy,
+        optionsList
+    );
+    console.log(`✅ "Termination done by" set to "${FORM_DATA.terminationDoneBy}".`);
 }
 
 async function fillFamilyPlanningMethod(driver) {
@@ -308,7 +384,6 @@ async function fillFamilyPlanningMethod(driver) {
             if (isChecked !== 'true') {
                 await primaryRadioButton.click();
                 console.log(`✔ Selected "${FORM_DATA.familyPlanningMethod}". Waiting for Yes/No options to open...`);
-
                 await driver.pause(1500);
             } else {
                 console.log(`➡ Family Planning Method is already set to "${FORM_DATA.familyPlanningMethod}".`);
@@ -417,6 +492,7 @@ async function fillAbortionForm(driver) {
     await fillVisitDate(driver);
     await driver.pause(1000);
 
+    // Call updated Serial Number logic
     await fillSerialNumber(driver);
     await driver.pause(1000);
 
@@ -439,7 +515,7 @@ async function fillAbortionForm(driver) {
     await driver.pause(1000);
 
     await clickSubmitButton(driver);
-    await driver.pause(2000); // Small pause to let the network request go out
+    await driver.pause(2000);
 
     console.log("--- Finished Abortion Form Details ---");
 }

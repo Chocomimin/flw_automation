@@ -36,6 +36,7 @@ async function tapByCoordinates(driver, x, y) {
         ]
     }]);
     await driver.releaseActions();
+    await driver.pause(500);
 }
 
 async function swipeByCoordinates(driver, startX, startY, endX, endY) {
@@ -52,7 +53,77 @@ async function swipeByCoordinates(driver, startX, startY, endX, endY) {
         ]
     }]);
     await driver.releaseActions();
+    await driver.pause(500);
 }
+
+// ── SMART BI-DIRECTIONAL SCROLLING ────────────────────────────────────────────
+
+async function smartScrollToId(driver, resourceId) {
+    console.log(`[SCROLL] Looking for element ID: ${resourceId}`);
+
+    let el = await driver.$(`//*[@resource-id="${resourceId}"]`);
+    if (await el.isExisting() && await el.isDisplayed()) return;
+
+    for (let i = 0; i < 4; i++) {
+        await swipeByCoordinates(driver, 540, 1600, 540, 600);
+        await driver.pause(1000);
+        el = await driver.$(`//*[@resource-id="${resourceId}"]`);
+        if (await el.isExisting() && await el.isDisplayed()) return;
+    }
+
+    for (let i = 0; i < 8; i++) {
+        await swipeByCoordinates(driver, 540, 600, 540, 1600);
+        await driver.pause(1000);
+        el = await driver.$(`//*[@resource-id="${resourceId}"]`);
+        if (await el.isExisting() && await el.isDisplayed()) return;
+    }
+    console.log(`⚠️ Warning: Could not find element ID: ${resourceId}`);
+}
+
+async function smartScrollToText(driver, text) {
+    console.log(`[SCROLL] Looking for text: "${text}"`);
+
+    let el = await driver.$(`//*[contains(@text, "${text}") or contains(@hint, "${text}")]`);
+    if (await el.isExisting() && await el.isDisplayed()) return;
+
+    for (let i = 0; i < 4; i++) {
+        await swipeByCoordinates(driver, 540, 1600, 540, 600);
+        await driver.pause(1000);
+        el = await driver.$(`//*[contains(@text, "${text}") or contains(@hint, "${text}")]`);
+        if (await el.isExisting() && await el.isDisplayed()) return;
+    }
+
+    for (let i = 0; i < 8; i++) {
+        await swipeByCoordinates(driver, 540, 600, 540, 1600);
+        await driver.pause(1000);
+        el = await driver.$(`//*[contains(@text, "${text}") or contains(@hint, "${text}")]`);
+        if (await el.isExisting() && await el.isDisplayed()) return;
+    }
+    console.log(`⚠️ Warning: Could not find text: "${text}"`);
+}
+
+async function centerElement(driver, elementSelector) {
+    try {
+        const el = await driver.$(elementSelector);
+        if (!(await el.isDisplayed())) return;
+
+        const loc = await el.getLocation();
+        const size = await driver.getWindowRect();
+        const midY = Math.floor(size.height / 2);
+
+        if (Math.abs(loc.y - midY) > 200) {
+            console.log(`[CENTERING] Element is at Y:${loc.y}, centering to middle of screen...`);
+            let safeStartY = loc.y;
+            if (safeStartY > size.height - 100) safeStartY = size.height - 100;
+            if (safeStartY < 100) safeStartY = 100;
+
+            await swipeByCoordinates(driver, 540, safeStartY, 540, midY);
+            await driver.pause(1500);
+        }
+    } catch (e) {}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 async function clickGridItemByText(driver, text) {
     const xpath = `//android.widget.TextView[@text='${text}']/ancestor::android.widget.FrameLayout[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/cv_icon']`;
@@ -66,19 +137,27 @@ async function searchWithKeyboard(driver, searchText) {
     await searchInput.waitForDisplayed({ timeout: 10000 });
     await searchInput.click();
     await searchInput.setValue(searchText);
-    await driver.pressKeyCode(66);
+
+    try {
+        await driver.execute('mobile: performEditorAction', { action: 'search' });
+    } catch (e) {
+        await driver.pressKeyCode(66);
+    }
+    await driver.pause(1500);
+
+    try {
+        if (await driver.isKeyboardShown()) {
+            await driver.hideKeyboard();
+        }
+    } catch (e) {}
 }
 
 async function clickAddCbacForMember(driver, memberName) {
-    const androidScrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("${memberName}")`;
-    try {
-        await driver.$(`android=${androidScrollSelector}`).waitForDisplayed({ timeout: 10000 });
-    } catch (e) {}
-
+    await smartScrollToText(driver, memberName);
     await driver.pause(1000);
 
     const addCbacBtnXPath =
-        `//android.widget.TextView[@text='${memberName}']` +
+        `//android.widget.TextView[contains(translate(@text, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '${memberName.toLowerCase()}')]` +
         `/ancestor::android.view.ViewGroup` +
         `//android.widget.Button[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/btn_add_visit' and @text='ADD CBAC']`;
 
@@ -95,18 +174,10 @@ async function fillCalendarDate(driver, day, month, year, fieldHint) {
     const paddedDay = day < 10 ? '0' + day : day.toString();
     const targetDateDesc = `${paddedDay} ${targetMonthName} ${year}`;
 
-    const dateFieldXPath = `//android.widget.EditText[@hint='${fieldHint}']`;
-    let dateField = await driver.$(dateFieldXPath);
+    await smartScrollToText(driver, fieldHint);
+    await centerElement(driver, `//android.widget.EditText[@hint='${fieldHint}']`);
 
-    let isVisible = false;
-    try { isVisible = await dateField.isDisplayed(); } catch (e) {}
-
-    if (!isVisible) {
-        await swipeByCoordinates(driver, 540, 1800, 540, 600);
-        await driver.pause(1000);
-        dateField = await driver.$(dateFieldXPath);
-    }
-
+    const dateField = await driver.$(`//android.widget.EditText[@hint='${fieldHint}']`);
     await dateField.waitForDisplayed({ timeout: 5000 });
     await dateField.click();
     await driver.pause(1500);
@@ -157,18 +228,97 @@ async function fillCalendarDate(driver, day, month, year, fieldHint) {
 }
 
 // ==========================================
+// BULLETPROOF DROPDOWN LOGIC
+// ==========================================
+
+async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optionsList) {
+    await centerElement(driver, spinnerSelector);
+
+    // PRE-EMPTIVE KEYBOARD HIDE
+    try {
+        if (await driver.isKeyboardShown()) {
+            await driver.hideKeyboard();
+            await driver.pause(1000);
+        }
+    } catch (e) {}
+
+    const spinner = await driver.$(spinnerSelector);
+    await spinner.waitForDisplayed({ timeout: 10000 });
+
+    const loc = await spinner.getLocation();
+    const size = await spinner.getSize();
+    const screen = await driver.getWindowRect();
+
+    // Tap the right-side arrow icon physically to open the menu
+    const tapX = Math.floor(loc.x + (size.width * 0.90));
+    const tapY = Math.floor(loc.y + (size.height / 2));
+
+    console.log(`📍 Opening dropdown for "${value}" at (${tapX}, ${tapY})...`);
+    await tapByCoordinates(driver, tapX, tapY);
+    await driver.pause(2000); // Let dropdown animate open
+
+    // FIX: Scope the search STRICTLY inside the ListView to prevent clicking identical options elsewhere on the screen
+    try {
+        const itemXPath = await driver.$(`//android.widget.ListView//*[@text="${value}"]`);
+        if (await itemXPath.isExisting() && await itemXPath.isDisplayed()) {
+            await itemXPath.click();
+            console.log(`✅ Selected "${value}" via strict ListView XPath`);
+            await driver.pause(1000);
+            return;
+        }
+    } catch (e) {
+        console.log(`⚠️ Strict XPath failed, falling back to math tap...`);
+    }
+
+    // PURE MATH TAP FALLBACK
+    const index = optionsList.indexOf(value);
+    if (index === -1) {
+        throw new Error(`❌ "${value}" was not found in the provided options list: [${optionsList.join(', ')}]`);
+    }
+
+    console.log(`⚡ Executing Screen-Aware Math Tap for index ${index}...`);
+
+    const gap = 15;
+    const itemHeight = Math.floor(size.height * 0.92);
+    const spinnerTop = loc.y;
+    const spinnerBottom = loc.y + size.height;
+
+    const spaceBelow = screen.height - spinnerBottom;
+    const requiredSpace = (optionsList.length * itemHeight) + gap;
+
+    const finalTapX = Math.floor(loc.x + (size.width / 2));
+    let finalTapY;
+
+    if (spaceBelow >= requiredSpace || spaceBelow > spinnerTop) {
+        console.log(`📉 Menu opened downwards.`);
+        finalTapY = Math.floor(spinnerBottom + gap + (index * itemHeight) + (itemHeight / 2));
+    } else {
+        console.log(`📈 Menu opened upwards.`);
+        const popupBottom = spinnerTop - gap;
+        const popupTop = popupBottom - (optionsList.length * itemHeight);
+        finalTapY = Math.floor(popupTop + (index * itemHeight) + (itemHeight / 2));
+    }
+
+    await tapByCoordinates(driver, finalTapX, finalTapY);
+    console.log(`✅ Selected "${value}" via Math Fallback!`);
+    await driver.pause(1000);
+
+    await dismissAlertPopupIfPresent(driver);
+}
+
+// ==========================================
 // POPUP HANDLERS
 // ==========================================
 
 async function dismissAlertPopupIfPresent(driver) {
-    const alertText = await driver.$(`//*[contains(@text, "Inform ASHA")]`);
     try {
-        await alertText.waitForDisplayed({ timeout: 1000 });
+        const alertText = await driver.$(`//*[contains(@text, "Inform ASHA")]`);
+        await alertText.waitForDisplayed({ timeout: 1500 });
         console.log("[INFO] 'Alert !' popup detected. Tapping outside to dismiss...");
         await tapByCoordinates(driver, 540, 200);
         await driver.pause(1000);
     } catch (e) {
-        // No alert appeared, silently continue
+        // No alert appeared
     }
 }
 
@@ -179,59 +329,39 @@ async function handleReferralPopup(driver, popupChoice = "YES", centerName = "CH
     const popupBtn = await driver.$(`//android.widget.Button[@resource-id="${btnId}"]`);
 
     try {
-        await popupBtn.waitForDisplayed({ timeout: 4000 });
+        await popupBtn.waitForDisplayed({ timeout: 3000 });
         console.log(`[SUCCESS] Referral popup detected! Clicking '${popupChoice.toUpperCase()}'...`);
-        await driver.pause(500);
         await popupBtn.click();
+        await driver.pause(1000);
     } catch (e) {
-        console.log("[INFO] No referral popup appeared. Continuing with the form...");
+        console.log("[INFO] No referral popup appeared. Continuing...");
         return;
     }
 
-    if (popupChoice.toUpperCase() === "NO") {
-        await driver.pause(1000);
-        return;
-    }
+    if (popupChoice.toUpperCase() === "NO") return;
 
     console.log("[INFO] Waiting for Referral Screen to load...");
     await driver.pause(3000);
 
-    const dropdown = await driver.$(`//android.widget.Spinner[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown"]`);
-
     try {
-        await dropdown.waitForDisplayed({ timeout: 8000 });
         console.log(`[INFO] Selecting Healthcare Center: ${centerName}`);
-        await dropdown.click();
-        await driver.pause(1500);
+        const dropdownSelector = `//android.widget.Spinner[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown"]`;
+        const optionsList = ["Apolo", "CHC", "District Hospital", "PHC"];
 
-        const centerCoords = {
-            "Apolo": { x: 500, y: 300 },
-            "CHC": { x: 500, y: 420 },
-            "District Hospital": { x: 500, y: 550 },
-            "PHC": { x: 500, y: 680 }
-        };
+        if (!optionsList.includes(centerName)) { centerName = "CHC"; }
 
-        const coords = centerCoords[centerName] || centerCoords["CHC"];
-        await tapByCoordinates(driver, coords.x, coords.y);
-        await driver.pause(1000);
+        await smartScrollToId(driver, "org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown");
+        await clickSpinnerAndSelectOption(driver, dropdownSelector, centerName, optionsList);
 
         console.log("[INFO] Submitting Referral Screen...");
         const submitBtn = await driver.$(`//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_submit"]`);
         await submitBtn.click();
     } catch(e) {
-         console.log("[WARNING] Referral screen dropdown not found.");
+         console.log("[WARNING] Referral screen dropdown not found or interaction failed.");
     }
 
     console.log("[INFO] Waiting for screen to transition...");
-    const mainScrollView = await driver.$(`//android.widget.ScrollView`);
-    try {
-        await mainScrollView.waitForDisplayed({ timeout: 10000 });
-        console.log("[SUCCESS] UI is ready.");
-    } catch (e) {
-        console.log("[WARNING] Main UI transition delay.");
-    }
-
-    await driver.pause(2000);
+    await driver.pause(3000);
 }
 
 // ==========================================
@@ -239,98 +369,53 @@ async function handleReferralPopup(driver, popupChoice = "YES", centerName = "CH
 // ==========================================
 
 async function selectSmokeStatus(driver, statusSelection) {
-    const scrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/actv_smoke_dropdown"))`;
-    try { await driver.$(`android=${scrollSelector}`).waitForDisplayed({ timeout: 5000 }); } catch (e) {}
+    console.log(`[INFO] Selecting Smoke Status: ${statusSelection}`);
+    const resourceId = "org.piramalswasthya.sakhi.saksham.uat:id/actv_smoke_dropdown";
+    await smartScrollToId(driver, resourceId);
 
-    const spinner = await driver.$(`//android.widget.Spinner[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_smoke_dropdown"]`);
-    await spinner.click();
-    await driver.pause(1500);
-
-    const coordinatesMap = {
-        "Never": { x: 540, y: 1120 },
-        "Used to consume in the past sometime": { x: 540, y: 1200 },
-        "Daily": { x: 540, y: 1250 }
-    };
-
-    const coords = coordinatesMap[statusSelection];
-    if (coords) await tapByCoordinates(driver, coords.x, coords.y);
-    await driver.pause(1000);
+    const spinnerSelector = `//android.widget.Spinner[@resource-id="${resourceId}"]`;
+    const optionsList = ["Never", "Used to consume in the past sometime", "Daily"];
+    await clickSpinnerAndSelectOption(driver, spinnerSelector, statusSelection, optionsList);
 }
 
 async function selectAlcoholStatus(driver, statusSelection) {
-    const scrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/actv_alcohol_dropdown"))`;
-    try { await driver.$(`android=${scrollSelector}`).waitForDisplayed({ timeout: 5000 }); } catch (e) {}
+    console.log(`[INFO] Selecting Alcohol Status: ${statusSelection}`);
+    const resourceId = "org.piramalswasthya.sakhi.saksham.uat:id/actv_alcohol_dropdown";
+    await smartScrollToId(driver, resourceId);
 
-    const spinner = await driver.$(`//android.widget.Spinner[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_alcohol_dropdown"]`);
-    await spinner.click();
-    await driver.pause(1500);
-
-    const coordinatesMap = {
-        "Yes": { x: 540, y: 1400 },
-        "No": { x: 540, y: 1300 }
-    };
-
-    const coords = coordinatesMap[statusSelection];
-    if (coords) await tapByCoordinates(driver, coords.x, coords.y);
-    await driver.pause(1000);
+    const spinnerSelector = `//android.widget.Spinner[@resource-id="${resourceId}"]`;
+    const optionsList = ["No", "Yes"];
+    await clickSpinnerAndSelectOption(driver, spinnerSelector, statusSelection, optionsList);
 }
 
 async function selectWaistMeasurement(driver, measurement) {
-    const scrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/actv_waist_dropdown"))`;
-    try { await driver.$(`android=${scrollSelector}`).waitForDisplayed({ timeout: 5000 }); } catch (e) {}
+    console.log(`[INFO] Selecting Waist Measurement: ${measurement}`);
+    const resourceId = "org.piramalswasthya.sakhi.saksham.uat:id/actv_waist_dropdown";
+    await smartScrollToId(driver, resourceId);
 
-    const spinner = await driver.$(`//android.widget.Spinner[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_waist_dropdown"]`);
-    await spinner.click();
-    await driver.pause(1500);
-
-    const coordinatesMap = {
-        "90 cm or less": { x: 540, y: 1480 },
-        "91-100 cm": { x: 540, y: 1580 },
-        "More than 100 cm": { x: 540, y: 1680 }
-    };
-
-    const coords = coordinatesMap[measurement];
-    if (coords) await tapByCoordinates(driver, coords.x, coords.y);
-    await driver.pause(1000);
+    const spinnerSelector = `//android.widget.Spinner[@resource-id="${resourceId}"]`;
+    const optionsList = ["90 cm or less", "91-100 cm", "More than 100 cm"];
+    await clickSpinnerAndSelectOption(driver, spinnerSelector, measurement, optionsList);
 }
 
 async function selectPhysicalActivityStatus(driver, activityLevel) {
-    const scrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/actv_pa_dropdown"))`;
-    try { await driver.$(`android=${scrollSelector}`).waitForDisplayed({ timeout: 5000 }); } catch (e) {}
+    console.log(`[INFO] Selecting Physical Activity Status: ${activityLevel}`);
+    const resourceId = "org.piramalswasthya.sakhi.saksham.uat:id/actv_pa_dropdown";
+    await smartScrollToId(driver, resourceId);
 
-    const spinner = await driver.$(`//android.widget.Spinner[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_pa_dropdown"]`);
-    await spinner.click();
-    await driver.pause(1500);
-
-    const coordinatesMap = {
-        "At least 150 minutes in a week": { x: 540, y: 1720 },
-        "Less than 150 minutes in a week": { x: 540, y: 1820 }
-    };
-
-    const coords = coordinatesMap[activityLevel];
-    if (coords) await tapByCoordinates(driver, coords.x, coords.y);
-    await driver.pause(1000);
+    const spinnerSelector = `//android.widget.Spinner[@resource-id="${resourceId}"]`;
+    const optionsList = ["At least 150 minutes in a week", "Less than 150 minutes in a week"];
+    await clickSpinnerAndSelectOption(driver, spinnerSelector, activityLevel, optionsList);
 }
 
 async function selectFamilyHistoryStatus(driver, dropdownSelection, popupChoice = "YES", centerName = "CHC") {
-    const scrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/actv_fh_dropdown"))`;
-    try { await driver.$(`android=${scrollSelector}`).waitForDisplayed({ timeout: 5000 }); } catch (e) {}
+    console.log(`[INFO] Selecting Family History: ${dropdownSelection}`);
+    const resourceId = "org.piramalswasthya.sakhi.saksham.uat:id/actv_fh_dropdown";
+    await smartScrollToId(driver, resourceId);
 
-    const spinner = await driver.$(`//android.widget.Spinner[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_fh_dropdown"]`);
-    await spinner.click();
-    await driver.pause(1500);
-
-    const coordinatesMap = {
-        "No": { x: 540, y: 1950 },
-        "Yes": { x: 540, y: 2070 }
-    };
-
-    const coords = coordinatesMap[dropdownSelection];
-    if (coords) {
-        await tapByCoordinates(driver, coords.x, coords.y);
-    }
-
-    await driver.pause(2000);
+    const spinnerSelector = `//android.widget.Spinner[@resource-id="${resourceId}"]`;
+    const optionsList = ["No", "Yes"];
+    await clickSpinnerAndSelectOption(driver, spinnerSelector, dropdownSelection, optionsList);
 
     console.log(`[INFO] Selected '${dropdownSelection}' in Family History. Checking for NCD popup...`);
     await handleReferralPopup(driver, popupChoice, centerName);
@@ -345,14 +430,8 @@ async function fillEarlyDetectionSymptoms(driver, symptomAnswers, popupChoice = 
         const fullContainerId = `org.piramalswasthya.sakhi.saksham.uat:id/${symptomId}`;
         console.log(`[INFO] Finding and answering ID: ${symptomId} -> ${answer}`);
 
-        const scrollSelector = `new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).setMaxSearchSwipes(15).scrollIntoView(new UiSelector().resourceId("${fullContainerId}"))`;
-
-        try {
-            await driver.$(`android=${scrollSelector}`).waitForDisplayed({ timeout: 5000 });
-        } catch (e) {
-            console.log(`[WARNING] Could not scroll to or find symptom: ${symptomId}. Skipping...`);
-            continue;
-        }
+        await smartScrollToId(driver, fullContainerId);
+        await centerElement(driver, `//android.widget.LinearLayout[@resource-id="${fullContainerId}"]`);
 
         const targetRbId = answer === "Yes" ? "rb_yes" : "rb_no";
         const xpath = `//android.widget.LinearLayout[@resource-id="${fullContainerId}"]//android.widget.RadioButton[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/${targetRbId}"]`;
@@ -360,11 +439,9 @@ async function fillEarlyDetectionSymptoms(driver, symptomAnswers, popupChoice = 
         const radioBtn = await driver.$(xpath);
         if (await radioBtn.isExisting() && await radioBtn.isDisplayed()) {
             await radioBtn.click();
-            await driver.pause(1500);
+            await driver.pause(1000);
 
             await dismissAlertPopupIfPresent(driver);
-
-            console.log(`[INFO] '${answer}' selected for ${symptomId}. Checking for referral popup...`);
             await handleReferralPopup(driver, popupChoice, centerName);
         }
     }
@@ -374,24 +451,17 @@ async function fillSymptomsByText(driver, symptomAnswers, popupChoice = "YES", c
     for (const [symptomText, answer] of Object.entries(symptomAnswers)) {
         console.log(`[INFO] Finding and answering Text: "${symptomText}" -> ${answer}`);
 
-        const scrollSelector = `new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).setMaxSearchSwipes(15).scrollTextIntoView("${symptomText}")`;
-        try {
-            await driver.$(`android=${scrollSelector}`).waitForDisplayed({ timeout: 5000 });
-        } catch (e) {
-            console.log(`[WARNING] Could not scroll to or find symptom: "${symptomText}"`);
-            continue;
-        }
+        await smartScrollToText(driver, symptomText);
+        await centerElement(driver, `//*[contains(@text, "${symptomText}")]`);
 
         const xpath = `//android.widget.TextView[contains(@text, "${symptomText}")]/..//android.widget.RadioButton[@text="${answer}"]`;
 
         const radioBtn = await driver.$(xpath);
         if (await radioBtn.isExisting() && await radioBtn.isDisplayed()) {
             await radioBtn.click();
-            await driver.pause(1500);
+            await driver.pause(1000);
 
             await dismissAlertPopupIfPresent(driver);
-
-            console.log(`[INFO] '${answer}' selected for "${symptomText}". Checking for referral popup...`);
             await handleReferralPopup(driver, popupChoice, centerName);
         }
     }
@@ -403,145 +473,48 @@ async function fillSymptomsByText(driver, symptomAnswers, popupChoice = "YES", c
 
 async function selectFuelType(driver, fuelSelection) {
     console.log(`[INFO] Selecting Fuel Type: ${fuelSelection}`);
+    const resourceId = "org.piramalswasthya.sakhi.saksham.uat:id/actv_fuel_dropdown";
+    await smartScrollToId(driver, resourceId);
 
-    // --- NEW: Fully scroll to the bottom BEFORE interacting with the dropdown ---
-    console.log(`[INFO] Scrolling to the absolute bottom of the screen...`);
-    const scrollToBottom = `new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).scrollToEnd(5)`;
-    try {
-        await driver.$(`android=${scrollToBottom}`);
-    } catch (e) {
-        console.log(`[WARNING] Could not completely scroll to the end of the page.`);
-    }
-    await driver.pause(1000);
-
-    // After scrolling to bottom, ensure the element is perfectly in view
-    const scrollSelector = `new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).setMaxSearchSwipes(10).scrollIntoView(new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/actv_fuel_dropdown"))`;
-    try {
-        await driver.$(`android=${scrollSelector}`).waitForDisplayed({ timeout: 5000 });
-    } catch (e) {
-        console.log(`[WARNING] Could not scroll to fuel dropdown.`);
-    }
-
-    const spinner = await driver.$(`//android.widget.Spinner[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_fuel_dropdown"]`);
-    await spinner.click();
-    await driver.pause(1500);
-
-    const coordinatesMap = {
-        "Firewood": { x: 540, y: 1350 },
-        "Crop Residue": { x: 540, y: 1500 },
-        "Gobar Gas": { x: 540, y: 1650 },
-        "Coal": { x: 540, y: 1800 },
-        "Kerosene oil": { x: 540, y: 1950 },
-        "LPG": { x: 540, y: 2100 }
-    };
-
-    const coords = coordinatesMap[fuelSelection];
-    if (coords) {
-        await tapByCoordinates(driver, coords.x, coords.y);
-    } else {
-        console.log(`[WARNING] Unknown fuel selection: ${fuelSelection}`);
-    }
-    await driver.pause(1000);
+    const spinnerSelector = `//android.widget.Spinner[@resource-id="${resourceId}"]`;
+    const optionsList = ["Firewood", "Crop Residue", "Gobar Gas", "Coal", "Kerosene oil", "LPG"];
+    await clickSpinnerAndSelectOption(driver, spinnerSelector, fuelSelection, optionsList);
 }
 
 async function selectOccupationalExposure(driver, exposureSelection, popupChoice = "YES", centerName = "CHC") {
     console.log(`[INFO] Selecting Occupational Exposure: ${exposureSelection}`);
+    const resourceId = "org.piramalswasthya.sakhi.saksham.uat:id/actv_exposure_dropdown";
+    await smartScrollToId(driver, resourceId);
 
-    const scrollSelector = `new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).setMaxSearchSwipes(10).scrollIntoView(new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/actv_exposure_dropdown"))`;
-    try {
-        await driver.$(`android=${scrollSelector}`).waitForDisplayed({ timeout: 5000 });
-    } catch (e) {
-        console.log(`[WARNING] Could not scroll to exposure dropdown.`);
-    }
+    const spinnerSelector = `//android.widget.Spinner[@resource-id="${resourceId}"]`;
+    const optionsList = ["Crop residue burning", "Burning of garbage - leaves", "Working in industries"];
 
-    const spinner = await driver.$(`//android.widget.Spinner[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_exposure_dropdown"]`);
-    await spinner.click();
-    await driver.pause(1500);
+    let matchedOption = optionsList.find(opt => exposureSelection.includes(opt)) || optionsList[0];
 
-    const coordinatesMap = {
-        "Crop residue burning": { x: 540, y: 1350 },
-        "Burning of garbage - leaves": { x: 540, y: 1480 },
-        "Working in industries": { x: 540, y: 1650 }
-    };
+    await clickSpinnerAndSelectOption(driver, spinnerSelector, matchedOption, optionsList);
 
-    let coords = null;
-    for (const [key, value] of Object.entries(coordinatesMap)) {
-        if (exposureSelection.includes(key)) {
-            coords = value;
-            break;
-        }
-    }
-
-    if (coords) {
-        await tapByCoordinates(driver, coords.x, coords.y);
-    } else {
-        console.log(`[WARNING] Unknown exposure selection: ${exposureSelection}`);
-    }
-
-    await driver.pause(1500);
-
-    console.log(`[INFO] Selected '${exposureSelection}'. Checking for COPD popup...`);
+    console.log(`[INFO] Selected '${matchedOption}'. Checking for COPD popup...`);
     await handleReferralPopup(driver, popupChoice, centerName);
 }
 
 async function selectLittleInterest(driver, selection) {
     console.log(`[INFO] Selecting PHQ2 Little Interest: ${selection}`);
+    const resourceId = "org.piramalswasthya.sakhi.saksham.uat:id/actv_li_dropdown";
+    await smartScrollToId(driver, resourceId);
 
-    const scrollSelector = `new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).setMaxSearchSwipes(10).scrollIntoView(new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/actv_li_dropdown"))`;
-    try {
-        await driver.$(`android=${scrollSelector}`).waitForDisplayed({ timeout: 5000 });
-    } catch (e) {
-        console.log(`[WARNING] Could not scroll to Little Interest dropdown.`);
-    }
-
-    const spinner = await driver.$(`//android.widget.Spinner[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_li_dropdown"]`);
-    await spinner.click();
-    await driver.pause(1500);
-
-    const coordinatesMap = {
-        "Not at all": { x: 500, y: 1750 },
-        "Several Days": { x: 500, y: 1880 },
-        "More than half the days": { x: 500, y: 2000 },
-        "Nearly everyday": { x: 500, y: 2120 }
-    };
-
-    const coords = coordinatesMap[selection];
-    if (coords) {
-        await tapByCoordinates(driver, coords.x, coords.y);
-    } else {
-        console.log(`[WARNING] Unknown selection: ${selection}`);
-    }
-    await driver.pause(1000);
+    const spinnerSelector = `//android.widget.Spinner[@resource-id="${resourceId}"]`;
+    const optionsList = ["Not at all", "Several Days", "More than half the days", "Nearly everyday"];
+    await clickSpinnerAndSelectOption(driver, spinnerSelector, selection, optionsList);
 }
 
 async function selectFeelingDown(driver, selection) {
     console.log(`[INFO] Selecting PHQ2 Feeling Down: ${selection}`);
+    const resourceId = "org.piramalswasthya.sakhi.saksham.uat:id/actv_fd_dropdown";
+    await smartScrollToId(driver, resourceId);
 
-    const scrollSelector = `new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).setMaxSearchSwipes(10).scrollIntoView(new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/actv_fd_dropdown"))`;
-    try {
-        await driver.$(`android=${scrollSelector}`).waitForDisplayed({ timeout: 5000 });
-    } catch (e) {
-        console.log(`[WARNING] Could not scroll to Feeling Down dropdown.`);
-    }
-
-    const spinner = await driver.$(`//android.widget.Spinner[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_fd_dropdown"]`);
-    await spinner.click();
-    await driver.pause(1500);
-
-    const coordinatesMap = {
-        "Not at all": { x: 500, y: 1800 },
-        "Several Days": { x: 500, y: 1920 },
-        "More than half the days": { x: 500, y: 2040 },
-        "Nearly everyday": { x: 500, y: 2160 }
-    };
-
-    const coords = coordinatesMap[selection];
-    if (coords) {
-        await tapByCoordinates(driver, coords.x, coords.y);
-    } else {
-        console.log(`[WARNING] Unknown selection: ${selection}`);
-    }
-    await driver.pause(1000);
+    const spinnerSelector = `//android.widget.Spinner[@resource-id="${resourceId}"]`;
+    const optionsList = ["Not at all", "Several Days", "More than half the days", "Nearly everyday"];
+    await clickSpinnerAndSelectOption(driver, spinnerSelector, selection, optionsList);
 }
 
 // ==========================================
@@ -561,7 +534,7 @@ async function main() {
         await clickGridItemByText(driver, 'NCD Eligible List');
         await driver.pause(1500);
 
-        const targetBeneficiary = 'RADHIKA NAYAK';
+        const targetBeneficiary = 'KAVYA SHARMA';
         await searchWithKeyboard(driver, targetBeneficiary);
         await driver.pause(2000);
 
@@ -672,10 +645,7 @@ async function main() {
 
         // --- SAVE THE FORM ---
         console.log("Scrolling to Save button...");
-        const saveBtnScroll = `new UiScrollable(new UiSelector().className("android.widget.ScrollView").scrollable(true)).setMaxSearchSwipes(10).scrollIntoView(new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_save"))`;
-        try {
-            await driver.$(`android=${saveBtnScroll}`).waitForDisplayed({ timeout: 5000 });
-        } catch (e) {}
+        await smartScrollToId(driver, "org.piramalswasthya.sakhi.saksham.uat:id/btn_save");
 
         const saveButton = await driver.$(`//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_save"]`);
         if (await saveButton.isExisting() && await saveButton.isDisplayed()) {

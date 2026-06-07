@@ -109,7 +109,7 @@ async function runEPmsmaTest() {
         await driver.pause(3000);
 
         // 2. Search for the patient and click PMSMA
-        await searchAndClickPMSMA(driver, 'RTRT', 'RTRT YES');
+        await searchAndClickPMSMA(driver, 'RASHMI', 'RASHMI KARMAKAR');
 
         // Allow the form screen to load
         await driver.pause(3000);

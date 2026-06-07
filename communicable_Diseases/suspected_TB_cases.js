@@ -21,7 +21,10 @@ const wdOpts = {
 // 1. INPUT DATA
 // ==========================================
 const FORM_DATA = {
-    searchName: "rej",
+    searchName: "kavya sharma",
+
+    // Visit Date (Format: DD-Month-YYYY)
+    dateOfVisit: "24-June-2026",
 
     // Sputum Fields
     sputumSampleCollected: "Yes", // Options: "Yes", "No"
@@ -38,15 +41,183 @@ const FORM_DATA = {
     drTbConfirmed: "Yes"
 };
 
+// ==========================================
+// 2. CORE DROPDOWN HELPERS (From Household Form)
+// ==========================================
 
-async function tapAt(driver, x, y) {
-    await driver.action('pointer')
-        .move({ duration: 0, x: x, y: y })
-        .down({ button: 0 })
-        .pause(100)
-        .up({ button: 0 })
-        .perform();
+async function scrollSpinnerToMiddle(driver, spinnerSelector) {
+    try {
+        const spinner = await driver.$(spinnerSelector);
+        const loc = await spinner.getLocation();
+        const screen = await driver.getWindowRect();
+        const midY = screen.height / 2;
+
+        if (loc.y > midY + 100) {
+            console.log(`⬆️  Spinner at y=${loc.y}, scrolling toward middle...`);
+
+            const startY = Math.floor(screen.height * 0.7);
+            const endY = Math.floor(screen.height * 0.3);
+            const swipeX = Math.floor(screen.width / 2);
+
+            await driver.performActions([{
+                type: 'pointer', id: 'finger1',
+                parameters: { pointerType: 'touch' },
+                actions: [
+                    { type: 'pointerMove', duration: 0, x: swipeX, y: startY },
+                    { type: 'pointerDown', button: 0 },
+                    { type: 'pause', duration: 200 },
+                    { type: 'pointerMove', duration: 1000, x: swipeX, y: endY },
+                    { type: 'pointerUp', button: 0 }
+                ]
+            }]);
+            await driver.releaseActions();
+            await driver.pause(1500);
+        }
+    } catch (e) {
+        console.log('⚠️  scrollSpinnerToMiddle skipped:', e.message);
+    }
 }
+
+async function tapByCoords(driver, tapX, tapY) {
+    await driver.performActions([{
+        type: 'pointer', id: 'finger1',
+        parameters: { pointerType: 'touch' },
+        actions: [
+            { type: 'pointerMove', duration: 0, x: tapX, y: tapY },
+            { type: 'pointerDown', button: 0 },
+            { type: 'pause',       duration: 150 },
+            { type: 'pointerUp',   button: 0 }
+        ]
+    }]);
+    await driver.releaseActions();
+    await driver.pause(500);
+}
+
+async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optionsList) {
+    await scrollSpinnerToMiddle(driver, spinnerSelector);
+
+    const spinner = await driver.$(spinnerSelector);
+    await spinner.waitForDisplayed({ timeout: 10000 });
+
+    const loc  = await spinner.getLocation();
+    const size = await spinner.getSize();
+    console.log(`📍 Spinner @ (${loc.x}, ${loc.y}), size (${size.width}x${size.height})`);
+
+    const tapX = Math.floor(loc.x + size.width - 40);
+    const tapY = Math.floor(loc.y + size.height / 2);
+
+    // Ensure keyboard is hidden before tapping the dropdown to avoid layout shifts
+    try {
+        if (await driver.isKeyboardShown()) {
+            await driver.hideKeyboard();
+            await driver.pause(1000);
+        }
+    } catch (e) {}
+
+    console.log(`📍 Tapping dropdown arrow at (${tapX}, ${tapY})`);
+    await tapByCoords(driver, tapX, tapY);
+    await driver.pause(2000);
+
+    // STRATEGY 0: Direct XPath
+    try {
+        const item = await driver.$(`//*[@text="${value}"]`);
+        await item.waitForDisplayed({ timeout: 4000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via XPath`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  XPath strategy failed: ${e.message}`);
+    }
+
+    // STRATEGY 1: UiSelector
+    try {
+        const item = await driver.$(`android=new UiSelector().text("${value}")`);
+        await item.waitForDisplayed({ timeout: 3000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via UiSelector`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  UiSelector strategy failed: ${e.message}`);
+    }
+
+    // STRATEGY 2: Tag-by-tag XML parse
+    try {
+        const source = await driver.getPageSource();
+        const nodes = source.match(/<[^>]+>/g) || [];
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const textRegex = new RegExp(`(?:text|content-desc)="\\s*${escapedValue}\\s*"`);
+        let foundNode = null;
+
+        for (const node of nodes) {
+            if (textRegex.test(node) && node.includes('bounds=')) {
+                foundNode = node;
+                break;
+            }
+        }
+
+        if (foundNode) {
+            const boundsMatch = foundNode.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            if (boundsMatch) {
+                const tapX = Math.floor((parseInt(boundsMatch[1]) + parseInt(boundsMatch[3])) / 2);
+                const tapY = Math.floor((parseInt(boundsMatch[2]) + parseInt(boundsMatch[4])) / 2);
+                console.log(`📍 Found "${value}" in XML (tag parse) → tap(${tapX},${tapY})`);
+                await tapByCoords(driver, tapX, tapY);
+                console.log(`✅ Selected "${value}" via tag parse`);
+                return;
+            }
+        }
+        console.log(`⚠️  "${value}" not found via tag parse, trying regex strategy...`);
+    } catch (e) {
+        console.log(`⚠️  Tag parse failed: ${e.message}`);
+    }
+
+    // STRATEGY 3: Inline regex bounds
+    try {
+        const source = await driver.getPageSource();
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`text="${escapedValue}"[^/]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`);
+        const match = source.match(regex);
+
+        if (match) {
+            const tapX = Math.floor((parseInt(match[1]) + parseInt(match[3])) / 2);
+            const tapY = Math.floor((parseInt(match[2]) + parseInt(match[4])) / 2);
+            console.log(`📍 Found "${value}" via regex → tap(${tapX},${tapY})`);
+            await tapByCoords(driver, tapX, tapY);
+            console.log(`✅ Selected "${value}" via regex`);
+            return;
+        }
+        console.log(`⚠️  "${value}" not found via regex, trying coordinate fallback...`);
+    } catch (e) {
+        console.log(`⚠️  Regex strategy failed: ${e.message}`);
+    }
+
+    // STRATEGY 4: Coordinate fallback
+    const screen = await driver.getWindowRect();
+    const idx = optionsList.indexOf(value);
+    if (idx === -1) throw new Error(`"${value}" not in list: [${optionsList.join(', ')}]`);
+
+    const rowHeight     = size.height;
+    const spinnerBottom = loc.y + size.height;
+    const opensUpward   = (screen.height - spinnerBottom) < (optionsList.length * rowHeight);
+    const finalTapX     = Math.floor(loc.x + size.width / 2);
+    let   finalTapY;
+
+    if (opensUpward) {
+        const reversedIdx = (optionsList.length - 1) - idx;
+        finalTapY = Math.floor(loc.y - (reversedIdx * rowHeight) - (rowHeight / 2));
+    } else {
+        finalTapY = Math.floor(spinnerBottom + (idx * rowHeight) + (rowHeight / 2));
+    }
+    finalTapY = Math.max(5, Math.min(finalTapY, screen.height - 5));
+
+    console.log(`📍 Coordinate fallback → tap(${finalTapX}, ${finalTapY})`);
+    await tapByCoords(driver, finalTapX, finalTapY);
+    console.log(`✅ Selected "${value}" via coordinates`);
+}
+
+// ==========================================
+// 3. PAGE ACTIONS
+// ==========================================
 
 async function scrollDownToText(driver, text, maxSwipes = 2) {
     try {
@@ -116,10 +287,6 @@ async function selectDateFromPicker(driver, targetDay, targetMonth, targetYear) 
         console.error("❌ Error setting the date from the picker:", error.message);
     }
 }
-
-// ==========================================
-// 3. PAGE ACTIONS
-// ==========================================
 
 async function clickCommunicableDiseases(driver) {
     try {
@@ -223,59 +390,58 @@ async function fillSputumSampleCollected(driver, answerText) {
 async function fillSputumSampleSubmittedAt(driver, locationText) {
     try {
         console.log(`Processing 'Sputum sample submitted at' Dropdown for: "${locationText}"...`);
+        const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Sputum sample submitted at"))`;
+        await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        const spinnerXPath = `//android.widget.Spinner[@text="Sputum sample submitted at" or @hint="Sputum sample submitted at"]`;
-        const spinner = await driver.$(spinnerXPath);
+        const spinnerSelector = `//android.widget.Spinner[contains(@text, "Sputum sample submitted at") or contains(@hint, "Sputum sample submitted at")]`;
+        const optionsList = ["HWC", "PHC", "CHC", "District Hospital", "Govt. Medical College"];
 
-        if (await spinner.isExisting()) {
-            console.log("⏳ Opening 'Sputum sample submitted at' Dropdown...");
-
-            const arrowXPath = `//android.widget.Spinner[contains(@text, "Sputum sample submitted at")]/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
-            const dropdownArrow = await driver.$(arrowXPath);
-
-            if (await dropdownArrow.isExisting()) {
-                await dropdownArrow.click();
-                await driver.pause(1500);
-
-                if (await driver.isKeyboardShown()) {
-                    await driver.hideKeyboard();
-                    await driver.pause(1000);
-                    await dropdownArrow.click();
-                    await driver.pause(1500);
-                }
-
-                const targetOption = await driver.$(`//*[@text="${locationText}"]`);
-
-                if (await targetOption.isExisting()) {
-                    console.log(`⏳ Found text "${locationText}", tapping it directly...`);
-                    await targetOption.click();
-                    console.log(`✔ Location updated to "${locationText}".`);
-                } else {
-                    console.log(`⚠ Could not find text natively, falling back to coordinates...`);
-
-                    const LOCATION_COORDS = {
-                        'HWC':                   { x: 500, y: 1140 },
-                        'PHC':                   { x: 500, y: 1250 },
-                        'CHC':                   { x: 500, y: 1360 },
-                        'District Hospital':     { x: 500, y: 1470 },
-                        'Govt. Medical College': { x: 500, y: 1580 }
-                    };
-
-                    const coords = LOCATION_COORDS[locationText];
-                    if (coords) {
-                        console.log(`⏳ Tapping coordinates X:${coords.x} Y:${coords.y} for ${locationText}`);
-                        await tapAt(driver, coords.x, coords.y);
-                        console.log(`✔ Location updated via coordinates.`);
-                    } else {
-                        console.error(`❌ "${locationText}" is not defined in the coordinate map.`);
-                    }
-                }
-            } else {
-                console.error('❌ Could not find the dropdown arrow.');
-            }
-        }
+        await clickSpinnerAndSelectOption(driver, spinnerSelector, locationText, optionsList);
     } catch (error) {
         console.error('❌ Error processing Sputum sample submitted at dropdown:', error.message);
+    }
+}
+
+async function fillReasonForSuspicion(driver, reasonText) {
+    try {
+        console.log(`Processing 'Reason for suspicion' Dropdown for: "${reasonText}"...`);
+        const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Reason for suspicion"))`;
+        await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
+
+        const spinnerSelector = `//android.widget.Spinner[contains(@text, "Reason for suspicion") or contains(@hint, "Reason for suspicion")]`;
+        const optionsList = [
+            'Treatment failure',
+            'TB Relapse/Recurring symptoms',
+            'Contact with DR-TB case',
+            'Treatment after LFU (Lost to Follow-up)',
+            'Other'
+        ];
+
+        await clickSpinnerAndSelectOption(driver, spinnerSelector, reasonText, optionsList);
+    } catch (error) {
+        console.error('❌ Error processing Reason for suspicion dropdown:', error.message);
+    }
+}
+
+async function fillReferralFacility(driver, facilityText) {
+    try {
+        console.log(`Processing 'Referral Facility' Dropdown for: "${facilityText}"...`);
+        const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Referral Facility"))`;
+        await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
+
+        const spinnerSelector = `//android.widget.Spinner[contains(@text, "Referral Facility") or contains(@hint, "Referral Facility")]`;
+        const optionsList = [
+            'District TB Centre (DTC)',
+            'HWC',
+            'PHC',
+            'CHC',
+            'District Hospital',
+            'Govt. Medical College'
+        ];
+
+        await clickSpinnerAndSelectOption(driver, spinnerSelector, facilityText, optionsList);
+    } catch (error) {
+        console.error('❌ Error processing Referral Facility dropdown:', error.message);
     }
 }
 
@@ -283,11 +449,9 @@ async function fillNikshayID(driver, idValue) {
     try {
         console.log(`Attempting to enter Nikshay ID: "${idValue}"...`);
 
-        // Scroll to the input field
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Nikshay ID"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        // Find and enter value
         const nikshayInputXPath = '//android.widget.EditText[@hint="Nikshay ID" or @text="Nikshay ID"]';
         const inputElement = await driver.$(nikshayInputXPath);
 
@@ -295,7 +459,6 @@ async function fillNikshayID(driver, idValue) {
         await inputElement.clearValue();
         await inputElement.setValue(idValue);
 
-        // Hide keyboard after typing
         if (await driver.isKeyboardShown()) {
             await driver.hideKeyboard();
         }
@@ -344,131 +507,22 @@ async function fillTypeOfTBCase(driver, caseType) {
     }
 }
 
-async function fillReasonForSuspicion(driver, reasonText) {
+async function fillDrTbConfirmed(driver, answerText) {
     try {
-        console.log(`Processing 'Reason for suspicion' Dropdown for: "${reasonText}"...`);
+        console.log(`Attempting to set 'Has the diagnosis of DR-TB been confirmed?' to '${answerText}'...`);
 
-        const spinnerXPath = `//android.widget.Spinner[@text="Reason for suspicion *" or @hint="Reason for suspicion *"]`;
-        const spinner = await driver.$(spinnerXPath);
-
-        if (await spinner.isExisting()) {
-            console.log("⏳ Opening 'Reason for suspicion' Dropdown...");
-
-            const arrowXPath = `//android.widget.Spinner[contains(@text, "Reason for suspicion")]/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
-            const dropdownArrow = await driver.$(arrowXPath);
-
-            if (await dropdownArrow.isExisting()) {
-                await dropdownArrow.click();
-                await driver.pause(1500);
-
-                if (await driver.isKeyboardShown()) {
-                    await driver.hideKeyboard();
-                    await driver.pause(1000);
-                    await dropdownArrow.click();
-                    await driver.pause(1500);
-                }
-
-                const targetOption = await driver.$(`//*[@text="${reasonText}"]`);
-
-                if (await targetOption.isExisting()) {
-                    console.log(`⏳ Found text "${reasonText}", tapping it directly...`);
-                    await targetOption.click();
-                    console.log(`✔ Reason updated to "${reasonText}".`);
-                } else {
-                    console.log(`⚠ Could not find text natively, falling back to coordinates...`);
-
-                    const REASON_COORDS = {
-                        'Treatment failure':                       { x: 500, y: 970 },
-                        'TB Relapse/Recurring symptoms':           { x: 500, y: 1080 },
-                        'Contact with DR-TB case':                 { x: 500, y: 1190 },
-                        'Treatment after LFU (Lost to Follow-up)': { x: 500, y: 1300 },
-                        'Other':                                   { x: 500, y: 1410 }
-                    };
-
-                    const coords = REASON_COORDS[reasonText];
-                    if (coords) {
-                        console.log(`⏳ Tapping coordinates X:${coords.x} Y:${coords.y} for ${reasonText}`);
-                        await tapAt(driver, coords.x, coords.y);
-                        console.log(`✔ Reason updated via coordinates.`);
-                    } else {
-                        console.error(`❌ "${reasonText}" is not defined in the coordinate map.`);
-                    }
-                }
-            } else {
-                console.error('❌ Could not find the dropdown arrow for Reason for suspicion.');
-            }
-        } else {
-            console.log(`➡ 'Reason for suspicion' dropdown is not visible. Skipping.`);
-        }
-    } catch (error) {
-        console.error('❌ Error processing Reason for suspicion dropdown:', error.message);
-    }
-}
-
-async function fillReferralFacility(driver, facilityText) {
-    try {
-        console.log(`Processing 'Referral Facility' Dropdown for: "${facilityText}"...`);
-
-        // Scroll into view if needed
-        const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Referral Facility"))`;
+        const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Has the diagnosis of DR-TB been confirmed"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        const spinnerXPath = `//android.widget.Spinner[@text="Referral Facility *" or @hint="Referral Facility *"]`;
-        const spinner = await driver.$(spinnerXPath);
+        const radioXPath = `//android.widget.TextView[contains(@text, "Has the diagnosis of DR-TB been confirmed")]/../../android.widget.RadioGroup//android.widget.RadioButton[@text="${answerText}"]`;
+        const radioBtn = await driver.$(radioXPath);
 
-        if (await spinner.isExisting()) {
-            console.log("⏳ Opening 'Referral Facility' Dropdown...");
+        await radioBtn.waitForDisplayed({ timeout: 3000 });
+        await radioBtn.click();
 
-            const arrowXPath = `//android.widget.Spinner[contains(@text, "Referral Facility")]/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu"]`;
-            const dropdownArrow = await driver.$(arrowXPath);
-
-            if (await dropdownArrow.isExisting()) {
-                await dropdownArrow.click();
-                await driver.pause(1500);
-
-                if (await driver.isKeyboardShown()) {
-                    await driver.hideKeyboard();
-                    await driver.pause(1000);
-                    await dropdownArrow.click();
-                    await driver.pause(1500);
-                }
-
-                const targetOption = await driver.$(`//*[@text="${facilityText}"]`);
-
-                if (await targetOption.isExisting()) {
-                    console.log(`⏳ Found text "${facilityText}", tapping it directly...`);
-                    await targetOption.click();
-                    console.log(`✔ Facility updated to "${facilityText}".`);
-                } else {
-                    console.log(`⚠ Could not find text natively, falling back to coordinates...`);
-
-                    // Estimated Y coordinates starting just below the spinner (y: ~1040)
-                    const FACILITY_COORDS = {
-                        'District TB Centre (DTC)': { x: 500, y: 1100 },
-                        'HWC':                      { x: 500, y: 1210 },
-                        'PHC':                      { x: 500, y: 1320 },
-                        'CHC':                      { x: 500, y: 1430 },
-                        'District Hospital':        { x: 500, y: 1540 },
-                        'Govt. Medical College':    { x: 500, y: 1650 }
-                    };
-
-                    const coords = FACILITY_COORDS[facilityText];
-                    if (coords) {
-                        console.log(`⏳ Tapping coordinates X:${coords.x} Y:${coords.y} for ${facilityText}`);
-                        await tapAt(driver, coords.x, coords.y);
-                        console.log(`✔ Facility updated via coordinates.`);
-                    } else {
-                        console.error(`❌ "${facilityText}" is not defined in the coordinate map.`);
-                    }
-                }
-            } else {
-                console.error('❌ Could not find the dropdown arrow for Referral Facility.');
-            }
-        } else {
-            console.log(`➡ 'Referral Facility' dropdown is not visible. Skipping.`);
-        }
+        console.log(`✔ Successfully selected '${answerText}' for DR-TB diagnosis confirmation.`);
     } catch (error) {
-        console.error('❌ Error processing Referral Facility dropdown:', error.message);
+        console.error(`❌ Failed to set 'Has the diagnosis of DR-TB been confirmed?':`, error.message);
     }
 }
 
@@ -491,32 +545,10 @@ async function clickSubmitButton(driver) {
     }
 }
 
-async function fillDrTbConfirmed(driver, answerText) {
-    try {
-        console.log(`Attempting to set 'Has the diagnosis of DR-TB been confirmed?' to '${answerText}'...`);
-
-        // Scroll into view
-        const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Has the diagnosis of DR-TB been confirmed"))`;
-        await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
-
-        // Find and click the specific radio button
-        const radioXPath = `//android.widget.TextView[contains(@text, "Has the diagnosis of DR-TB been confirmed")]/../../android.widget.RadioGroup//android.widget.RadioButton[@text="${answerText}"]`;
-        const radioBtn = await driver.$(radioXPath);
-
-        await radioBtn.waitForDisplayed({ timeout: 3000 });
-        await radioBtn.click();
-
-        console.log(`✔ Successfully selected '${answerText}' for DR-TB diagnosis confirmation.`);
-    } catch (error) {
-        console.error(`❌ Failed to set 'Has the diagnosis of DR-TB been confirmed?':`, error.message);
-    }
-}
-
 async function clickOkButton(driver) {
     try {
         console.log("Attempting to click the 'OK' button...");
 
-        // XPath targeting common variations of the OK button text and the standard Android dialog positive button ID
         const okBtnXPath = '//android.widget.Button[@text="OK" or @text="Ok" or @text="ok" or @resource-id="android:id/button1"]';
         const okBtn = await driver.$(okBtnXPath);
 
@@ -528,6 +560,11 @@ async function clickOkButton(driver) {
         console.error("❌ Failed to click the 'OK' button:", error.message);
     }
 }
+
+// ==========================================
+// 4. MAIN TEST EXECUTION
+// ==========================================
+
 async function runTest() {
     const driver = await remote(wdOpts);
     try {
@@ -542,49 +579,54 @@ async function runTest() {
         await searchAndClickTrack(driver, FORM_DATA.searchName);
         await driver.pause(1500);
 
-        // 1. Fill Date
-        await fillDateOfVisit(driver, 24, "September", 2025);
+        // 1. Fill Date of Visit (Parsed from FORM_DATA)
+        const [visitDay, visitMonth, visitYear] = FORM_DATA.dateOfVisit.split('-');
+        await fillDateOfVisit(driver, parseInt(visitDay, 10), visitMonth, parseInt(visitYear, 10));
         await driver.pause(500);
 
-        await fillReferralFacility(driver, FORM_DATA.referralFacility);
+        // 2. Fill Type of Case
+        await fillTypeOfTBCase(driver, FORM_DATA.typeOfTBCase);
+        await driver.pause(1000);
+
+        // If type of TB is previously treated TB or DR-TB case, fill reason for suspicion
+        if (FORM_DATA.typeOfTBCase === "Previously treated TB case" || FORM_DATA.typeOfTBCase === "DR-TB case") {
+            await fillReasonForSuspicion(driver, FORM_DATA.reasonForSuspicion);
+            await driver.pause(1000);
+        }
+
+        // 3. Fill Sputum Collected
         await fillSputumSampleCollected(driver, FORM_DATA.sputumSampleCollected);
         await driver.pause(1000);
 
-        // 3. If Sputum is collected, fill out the new fields that appear
+        // If it is Yes, fill sputum sample submitted, nikshay id, sputum test result
         if (FORM_DATA.sputumSampleCollected === "Yes") {
             await fillSputumSampleSubmittedAt(driver, FORM_DATA.sputumSampleSubmittedAt);
             await driver.pause(1000);
 
-            // Fill Nikshay ID
             await fillNikshayID(driver, FORM_DATA.nikshayID);
             await driver.pause(1000);
 
             await fillSputumTestResult(driver, FORM_DATA.sputumTestResult);
             await driver.pause(1000);
-            // await fillDrTbConfirmed(driver, FORM_DATA.drTbConfirmed);
         }
 
-        // 4. Select Type of TB case
-        await fillTypeOfTBCase(driver, FORM_DATA.typeOfTBCase);
+        // 4. Fill Referral Facility
+        await fillReferralFacility(driver, FORM_DATA.referralFacility);
         await driver.pause(1000);
 
-
-
-        // 5. Select Reason for Suspicion (if it appeared)
-        if (FORM_DATA.typeOfTBCase !== "New case of TB") {
-            await fillReasonForSuspicion(driver, FORM_DATA.reasonForSuspicion);
-        }
-
-        await driver.pause(1000);
+        // 5. Fill has the diagnosis of dr-tb
         await fillDrTbConfirmed(driver, FORM_DATA.drTbConfirmed);
         await driver.pause(1000);
+
         // 6. Submit Form
         await clickSubmitButton(driver);
         await clickOkButton(driver);
 
     } finally {
-        await driver.pause(2000);
-        await driver.deleteSession();
+        if (driver) {
+            await driver.pause(2000);
+            await driver.deleteSession();
+        }
     }
 }
 

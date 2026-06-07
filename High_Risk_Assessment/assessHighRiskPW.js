@@ -4,7 +4,7 @@ const { remote } = require('webdriverio');
 // CONFIGURATION - CHANGE THIS TO SWITCH FORMS
 // Options: 'MICRO_BIRTH_PLAN' or 'ASSESS'
 // ==========================================
-const FORM_TO_RUN = 'ASSESS'; // <-- CHANGE THIS
+const FORM_TO_RUN = 'MICRO_BIRTH_PLAN'; // <-- CHANGE THIS
 
 const capabilities = {
     platformName: 'Android',
@@ -26,6 +26,160 @@ const wdioOptions = {
 };
 
 // ==========================================
+// CORE DROPDOWN HELPERS (From Household Form)
+// ==========================================
+
+async function scrollSpinnerToMiddle(driver, spinnerSelector) {
+    try {
+        const spinner = await driver.$(spinnerSelector);
+        const loc = await spinner.getLocation();
+        const screen = await driver.getWindowRect();
+        const midY = screen.height / 2;
+
+        if (loc.y > midY + 100) {
+            console.log(`⬆️  Spinner at y=${loc.y}, scrolling toward middle...`);
+            const startY = Math.floor(screen.height * 0.7);
+            const endY = Math.floor(screen.height * 0.3);
+            const swipeX = Math.floor(screen.width / 2);
+
+            await driver.performActions([{
+                type: 'pointer', id: 'finger1',
+                parameters: { pointerType: 'touch' },
+                actions: [
+                    { type: 'pointerMove', duration: 0, x: swipeX, y: startY },
+                    { type: 'pointerDown', button: 0 },
+                    { type: 'pause', duration: 200 },
+                    { type: 'pointerMove', duration: 1000, x: swipeX, y: endY },
+                    { type: 'pointerUp', button: 0 }
+                ]
+            }]);
+            await driver.releaseActions();
+            await driver.pause(1500);
+        }
+    } catch (e) {
+        console.log('⚠️  scrollSpinnerToMiddle skipped:', e.message);
+    }
+}
+
+async function tapByCoords(driver, tapX, tapY) {
+    await driver.performActions([{
+        type: 'pointer', id: 'finger1',
+        parameters: { pointerType: 'touch' },
+        actions: [
+            { type: 'pointerMove', duration: 0, x: tapX, y: tapY },
+            { type: 'pointerDown', button: 0 },
+            { type: 'pause',       duration: 150 },
+            { type: 'pointerUp',   button: 0 }
+        ]
+    }]);
+    await driver.releaseActions();
+    await driver.pause(500);
+}
+
+async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optionsList) {
+    // 1. Force the spinner to the safe middle zone
+    await scrollSpinnerToMiddle(driver, spinnerSelector);
+
+    const spinner = await driver.$(spinnerSelector);
+    await spinner.waitForDisplayed({ timeout: 10000 });
+
+    const loc  = await spinner.getLocation();
+    const size = await spinner.getSize();
+    console.log(`📍 Spinner @ (${loc.x}, ${loc.y}), size (${size.width}x${size.height})`);
+
+    // 2. Click the RIGHT side of the spinner to explicitly hit the dropdown arrow
+    const tapX = Math.floor(loc.x + size.width - 40);
+    const tapY = Math.floor(loc.y + size.height / 2);
+
+    console.log(`📍 Tapping dropdown arrow at (${tapX}, ${tapY})`);
+    await tapByCoords(driver, tapX, tapY);
+    await driver.pause(2000); // Wait for popup to fully expand
+
+    // STRATEGY 0: Direct XPath
+    try {
+        const item = await driver.$(`//*[@text="${value}"]`);
+        await item.waitForDisplayed({ timeout: 4000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via XPath`);
+        return;
+    } catch (e) {}
+
+    // STRATEGY 1: UiSelector
+    try {
+        const item = await driver.$(`android=new UiSelector().text("${value}")`);
+        await item.waitForDisplayed({ timeout: 3000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via UiSelector`);
+        return;
+    } catch (e) {}
+
+    // STRATEGY 2: Tag-by-tag XML parse
+    try {
+        const source = await driver.getPageSource();
+        const nodes = source.match(/<[^>]+>/g) || [];
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const textRegex = new RegExp(`(?:text|content-desc)="\\s*${escapedValue}\\s*"`);
+        let foundNode = null;
+
+        for (const node of nodes) {
+            if (textRegex.test(node) && node.includes('bounds=')) {
+                foundNode = node;
+                break;
+            }
+        }
+
+        if (foundNode) {
+            const boundsMatch = foundNode.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            if (boundsMatch) {
+                const tapX = Math.floor((parseInt(boundsMatch[1]) + parseInt(boundsMatch[3])) / 2);
+                const tapY = Math.floor((parseInt(boundsMatch[2]) + parseInt(boundsMatch[4])) / 2);
+                await tapByCoords(driver, tapX, tapY);
+                console.log(`✅ Selected "${value}" via tag parse`);
+                return;
+            }
+        }
+    } catch (e) {}
+
+    // STRATEGY 3: Inline regex bounds
+    try {
+        const source = await driver.getPageSource();
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`text="${escapedValue}"[^/]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`);
+        const match = source.match(regex);
+
+        if (match) {
+            const tapX = Math.floor((parseInt(match[1]) + parseInt(match[3])) / 2);
+            const tapY = Math.floor((parseInt(match[2]) + parseInt(match[4])) / 2);
+            await tapByCoords(driver, tapX, tapY);
+            console.log(`✅ Selected "${value}" via regex`);
+            return;
+        }
+    } catch (e) {}
+
+    // STRATEGY 4: Coordinate fallback
+    const screen = await driver.getWindowRect();
+    const idx = optionsList.indexOf(value);
+    if (idx === -1) throw new Error(`"${value}" not in list: [${optionsList.join(', ')}]`);
+
+    const rowHeight     = size.height;
+    const spinnerBottom = loc.y + size.height;
+    const opensUpward   = (screen.height - spinnerBottom) < (optionsList.length * rowHeight);
+    const finalTapX     = Math.floor(loc.x + size.width / 2);
+    let   finalTapY;
+
+    if (opensUpward) {
+        const reversedIdx = (optionsList.length - 1) - idx;
+        finalTapY = Math.floor(loc.y - (reversedIdx * rowHeight) - (rowHeight / 2));
+    } else {
+        finalTapY = Math.floor(spinnerBottom + (idx * rowHeight) + (rowHeight / 2));
+    }
+    finalTapY = Math.max(5, Math.min(finalTapY, screen.height - 5));
+
+    await tapByCoords(driver, finalTapX, finalTapY);
+    console.log(`✅ Selected "${value}" via coordinates`);
+}
+
+// ==========================================
 // UTILITY & NAVIGATION FUNCTIONS
 // ==========================================
 
@@ -45,19 +199,9 @@ async function swipeByCoordinates(driver, startX, startY, endX, endY) {
     await driver.releaseActions();
 }
 
+// Kept for backward compatibility with your other functions
 async function tapByCoordinates(driver, x, y) {
-    await driver.performActions([{
-        type: 'pointer',
-        id: 'finger1',
-        parameters: { pointerType: 'touch' },
-        actions: [
-            { type: 'pointerMove', duration: 0, x: x, y: y },
-            { type: 'pointerDown', button: 0 },
-            { type: 'pause', duration: 150 },
-            { type: 'pointerUp', button: 0 }
-        ]
-    }]);
-    await driver.releaseActions();
+    await tapByCoords(driver, x, y);
 }
 
 async function clickGridItemByText(driver, text) {
@@ -161,18 +305,15 @@ async function submitAssessment(driver) {
 }
 
 // ==========================================
-// ASSESS FORM FILLING FUNCTION (FIXED)
+// ASSESS FORM FILLING FUNCTION
 // ==========================================
 
 async function fillAssessForm(driver) {
     console.log("Filling Assess form - High Risk Conditions in Pregnant Women...");
 
-    // FIXED: Select radio by tapping coordinates derived from the
-    // question label's bounds — avoids stale element ID reuse bug
     async function selectRadioByQuestionText(driver, questionText, answerText) {
         console.log(`  Processing question: "${questionText}" -> "${answerText}"`);
 
-        // Scroll question into view
         const questionXPath = `//android.widget.TextView[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/tv_nullable" and contains(@text, "${questionText}")]`;
 
         let questionEl = await driver.$(questionXPath);
@@ -189,15 +330,10 @@ async function fillAssessForm(driver) {
 
         await questionEl.waitForDisplayed({ timeout: 5000 });
 
-        // Get the location of the question label
         const questionLocation = await questionEl.getLocation();
         const questionSize = await questionEl.getSize();
         const questionBottomY = questionLocation.y + questionSize.height;
 
-        // FIXED: Find the RadioGroup that appears DIRECTLY AFTER this question label
-        // by using the question's Y position to identify the correct RadioGroup
-        // We find all RadioGroups and pick the one whose Y position is closest
-        // and just below the question label
         const allRadioGroupsXPath = `//android.widget.RadioGroup[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/rg"]`;
         const allRadioGroups = await driver.$$(allRadioGroupsXPath);
 
@@ -209,7 +345,6 @@ async function fillAssessForm(driver) {
             if (!rgVisible) continue;
 
             const rgLocation = await rg.getLocation();
-            // The RadioGroup should be BELOW the question label
             if (rgLocation.y >= questionBottomY) {
                 const distance = rgLocation.y - questionBottomY;
                 if (distance < closestDistance) {
@@ -224,12 +359,10 @@ async function fillAssessForm(driver) {
             return;
         }
 
-        // Now find the Yes/No button INSIDE this specific RadioGroup
         const radioButtonXPath = `.//android.widget.RadioButton[@text="${answerText}"]`;
         const radioBtn = await targetRadioGroup.$(radioButtonXPath);
         await radioBtn.waitForDisplayed({ timeout: 5000 });
 
-        // Re-fetch fresh element to avoid stale ID issue
         const isBtnChecked = await radioBtn.getAttribute('checked');
         if (isBtnChecked !== 'true') {
             await radioBtn.click();
@@ -284,32 +417,16 @@ async function fillAssessForm(driver) {
         console.log(`  Date set for '${hintText}'`);
     }
 
-    // ----------------------------
-    // SECTION: Information on Children
-    // ----------------------------
     await selectRadioByQuestionText(driver, 'No. of Deliveries is more than 3', 'Yes');
     await selectRadioByQuestionText(driver, 'Time from last delivery is less than 18 months', 'Yes');
-
-    // ----------------------------
-    // SECTION: Physical Observation
-    // ----------------------------
     await selectRadioByQuestionText(driver, 'Height is very short or less than 140 cms', 'Yes');
     await selectRadioByQuestionText(driver, 'Age is less than 18 or more than 35 years', 'No');
-
-    // ----------------------------
-    // SECTION: Obstetric History
-    // ----------------------------
     await selectRadioByQuestionText(driver, 'Rh Negative', 'Yes');
     await selectRadioByQuestionText(driver, 'Home delivery of previous pregnancy', 'Yes');
     await selectRadioByQuestionText(driver, 'Bad obstetric history', 'Yes');
     await selectRadioByQuestionText(driver, 'Multiple Pregnancy', 'Yes');
 
-    // ----------------------------
-    // LMP Date: 31-03-2026
-    // ----------------------------
     await setDateField(driver, 'LMP Date *', '31', 0);
-
-    // EDD is auto-calculated and read-only
     console.log("  EDD is auto-calculated, skipping...");
 
     console.log("Assess form filled successfully!");
@@ -324,54 +441,21 @@ async function fillMicroBirthPlanForm(driver) {
     await fillTextField(driver, 'Nearest SC/HWC', 'City Center SC');
     await driver.pause(500);
 
-    console.log("Opening Blood Group dropdown...");
-    const bloodGroupTitleXPath = `//*[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown" or contains(@text, 'Blood Group')]`;
+    console.log("Selecting Blood Group...");
 
-    let bgDropdown = await driver.$(bloodGroupTitleXPath);
-    let bgVisible = await bgDropdown.isDisplayed().catch(() => false);
-
-    let bgRetries = 5;
-    while (!bgVisible && bgRetries > 0) {
-        await swipeByCoordinates(driver, 540, 1800, 540, 500);
-        await driver.pause(1000);
-        bgDropdown = await driver.$(bloodGroupTitleXPath);
-        bgVisible = await bgDropdown.isDisplayed().catch(() => false);
-        bgRetries--;
-    }
-
-    await bgDropdown.waitForDisplayed({ timeout: 5000 });
-    await bgDropdown.click();
-    await driver.pause(1500);
-
-    console.log("Calculating dynamic screen coordinates for Blood Group...");
-    const windowSize = await driver.getWindowRect();
-    const screenWidth = windowSize.width;
-    const screenHeight = windowSize.height;
-
-    const BLOOD_GROUP_Y_PCT = {
-        'A +Ve': 0.345,
-        'A -Ve': 0.386,
-        'B +Ve': 0.427,
-        'B -Ve': 0.469,
-        'AB +Ve': 0.510,
-        'AB -Ve': 0.552,
-        'O +Ve': 0.593,
-        'O -Ve': 0.634
-    };
-
-    const targetBloodGroup = 'A +Ve';
-    const targetPercentage = BLOOD_GROUP_Y_PCT[targetBloodGroup];
-
-    if (targetPercentage) {
-        const tapX = Math.round(screenWidth * 0.5);
-        const tapY = Math.round(screenHeight * targetPercentage);
-        console.log(`Tapping '${targetBloodGroup}' at dynamic coordinates: X=${tapX}, Y=${tapY}`);
-        await tapByCoordinates(driver, tapX, tapY);
-    } else {
-        console.log(`Error: Percentage mapping for blood group '${targetBloodGroup}' not found.`);
-    }
+    // 1. Ensure the field is fully scrolled into view so the UI engine can locate the element
+    const bloodGroupScrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Blood Group"))`;
+    try { await driver.$(bloodGroupScrollSelector).waitForExist({ timeout: 3000 }); } catch (e) {}
     await driver.pause(1000);
 
+    // 2. Call the new robust helper method
+    const bloodGroupOptions = ['A +Ve', 'A -Ve', 'B +Ve', 'B -Ve', 'AB +Ve', 'AB -Ve', 'O +Ve', 'O -Ve'];
+    const spinnerSelector = `//android.widget.Spinner[contains(@text, "Blood Group")]`;
+
+    await clickSpinnerAndSelectOption(driver, spinnerSelector, 'A +Ve', bloodGroupOptions);
+    await driver.pause(1000);
+
+    // Continue filling text fields
     await fillTextField(driver, 'Contact Number 2', '9988776655');
     await driver.pause(500);
 
@@ -419,8 +503,8 @@ async function main() {
         await clickGridItemByText(driver, 'Assess High Risk in PW');
         await driver.pause(1000);
 
-        const searchText = 'RITA';
-        const targetBeneficiary = 'RITA SURI';
+        const searchText = 'JINA';
+        const targetBeneficiary = 'JINA BEGHAM';
 
         console.log(`Searching for: ${searchText}...`);
         await searchWithKeyboard(driver, searchText);

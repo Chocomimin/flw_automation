@@ -17,17 +17,202 @@ const wdioOptions = {
     capabilities: capabilities
 };
 
-/**
- * Universal helper function to tap an exact pixel on the screen using W3C Actions.
- */
-async function tapAt(driver, x, y) {
-    await driver.action('pointer')
-        .move({ duration: 0, x: x, y: y })
-        .down({ button: 0 })
-        .pause(100) // Brief pause to simulate a real human finger tap
-        .up({ button: 0 })
-        .perform();
+// ─────────────────────────────────────────────────────────────
+//  TEST INPUT DATA
+// ─────────────────────────────────────────────────────────────
+
+const inputData = {
+    diseaseCategory: 'Disease Control',
+    diseaseType: 'Kala Azar',
+    searchName: 'AJOY MAJHI',
+    targetMemberName: 'AJOY MAJHI',
+    visitDate: '15-03-2026',
+
+    // Status can be: 'Not Applicable', 'Recovering', 'Cured', 'Death', 'Recurrence of Symptoms'
+    beneficiaryStatus: 'Recovering',
+
+    // Death Workflow Inputs
+    dateOfDeath: '16-03-2026',
+    reasonForDeath: 'Other', // 'Fever', 'other Disease', 'Other'
+    otherReasonText: 'Unknown Complications',
+    placeOfDeath: 'Other', // 'Home', 'Facility', 'Other'
+    otherPlaceText: 'Street Side',
+
+    // Standard Workflow Inputs (If not 'Death')
+    caseStatus: 'Confirmed', // 'Suspected', 'Confirmed', 'Not Confirmed', 'Treatment Started'
+    referredTo: 'Primary Health Centre',
+    rdtResult: 'Positive', // 'Positive', 'Negative'
+    dateOfTest: '16-03-2026'
+};
+
+// ─────────────────────────────────────────────────────────────
+//  CORE HELPERS — Shared Spinner click + Coordinate fallbacks
+// ─────────────────────────────────────────────────────────────
+
+async function scrollSpinnerToMiddle(driver, spinnerSelector) {
+    try {
+        const spinner = await driver.$(spinnerSelector);
+        const loc = await spinner.getLocation();
+        const screen = await driver.getWindowRect();
+        const midY = screen.height / 2;
+
+        if (loc.y > midY + 100) {
+            console.log(`⬆️  Spinner at y=${loc.y}, scrolling toward middle...`);
+            const startY = Math.floor(screen.height * 0.7);
+            const endY = Math.floor(screen.height * 0.3);
+            const swipeX = Math.floor(screen.width / 2);
+
+            await driver.performActions([{
+                type: 'pointer', id: 'finger1',
+                parameters: { pointerType: 'touch' },
+                actions: [
+                    { type: 'pointerMove', duration: 0, x: swipeX, y: startY },
+                    { type: 'pointerDown', button: 0 },
+                    { type: 'pause', duration: 200 },
+                    { type: 'pointerMove', duration: 1000, x: swipeX, y: endY },
+                    { type: 'pointerUp', button: 0 }
+                ]
+            }]);
+            await driver.releaseActions();
+            await driver.pause(1500);
+        }
+    } catch (e) {
+        console.log('⚠️  scrollSpinnerToMiddle skipped:', e.message);
+    }
 }
+
+async function tapByCoords(driver, tapX, tapY) {
+    await driver.performActions([{
+        type: 'pointer', id: 'finger1',
+        parameters: { pointerType: 'touch' },
+        actions: [
+            { type: 'pointerMove', duration: 0, x: tapX, y: tapY },
+            { type: 'pointerDown', button: 0 },
+            { type: 'pause',       duration: 150 },
+            { type: 'pointerUp',   button: 0 }
+        ]
+    }]);
+    await driver.releaseActions();
+    await driver.pause(500);
+}
+
+async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optionsList) {
+    await scrollSpinnerToMiddle(driver, spinnerSelector);
+
+    const spinner = await driver.$(spinnerSelector);
+    await spinner.waitForDisplayed({ timeout: 10000 });
+
+    const loc  = await spinner.getLocation();
+    const size = await spinner.getSize();
+    console.log(`📍 Spinner @ (${loc.x}, ${loc.y}), size (${size.width}x${size.height})`);
+
+    const tapX = Math.floor(loc.x + size.width - 40);
+    const tapY = Math.floor(loc.y + size.height / 2);
+
+    console.log(`📍 Tapping dropdown arrow at (${tapX}, ${tapY})`);
+    await tapByCoords(driver, tapX, tapY);
+    await driver.pause(2000);
+
+    // ─── STRATEGY 0: Direct XPath ───
+    try {
+        const item = await driver.$(`//*[@text="${value}"]`);
+        await item.waitForDisplayed({ timeout: 4000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via XPath`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  XPath strategy failed: ${e.message}`);
+    }
+
+    // ─── STRATEGY 1: UiSelector ───
+    try {
+        const item = await driver.$(`android=new UiSelector().text("${value}")`);
+        await item.waitForDisplayed({ timeout: 3000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via UiSelector`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  UiSelector strategy failed: ${e.message}`);
+    }
+
+    // ─── STRATEGY 2: Tag-by-tag XML parse ───
+    try {
+        const source = await driver.getPageSource();
+        const nodes = source.match(/<[^>]+>/g) || [];
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const textRegex = new RegExp(`(?:text|content-desc)="\\s*${escapedValue}\\s*"`);
+        let foundNode = null;
+
+        for (const node of nodes) {
+            if (textRegex.test(node) && node.includes('bounds=')) {
+                foundNode = node;
+                break;
+            }
+        }
+
+        if (foundNode) {
+            const boundsMatch = foundNode.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            if (boundsMatch) {
+                const tapX = Math.floor((parseInt(boundsMatch[1]) + parseInt(boundsMatch[3])) / 2);
+                const tapY = Math.floor((parseInt(boundsMatch[2]) + parseInt(boundsMatch[4])) / 2);
+                console.log(`📍 Found "${value}" in XML (tag parse) → tap(${tapX},${tapY})`);
+                await tapByCoords(driver, tapX, tapY);
+                console.log(`✅ Selected "${value}" via tag parse`);
+                return;
+            }
+        }
+        console.log(`⚠️  "${value}" not found via tag parse, trying regex strategy...`);
+    } catch (e) {
+        console.log(`⚠️  Tag parse failed: ${e.message}`);
+    }
+
+    // ─── STRATEGY 3: Inline regex bounds ───
+    try {
+        const source = await driver.getPageSource();
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`text="${escapedValue}"[^/]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`);
+        const match = source.match(regex);
+
+        if (match) {
+            const tapX = Math.floor((parseInt(match[1]) + parseInt(match[3])) / 2);
+            const tapY = Math.floor((parseInt(match[2]) + parseInt(match[4])) / 2);
+            console.log(`📍 Found "${value}" via regex → tap(${tapX},${tapY})`);
+            await tapByCoords(driver, tapX, tapY);
+            console.log(`✅ Selected "${value}" via regex`);
+            return;
+        }
+        console.log(`⚠️  "${value}" not found via regex, trying coordinate fallback...`);
+    } catch (e) {
+        console.log(`⚠️  Regex strategy failed: ${e.message}`);
+    }
+
+    // ─── STRATEGY 4: Coordinate fallback ───
+    const screen = await driver.getWindowRect();
+    const idx = optionsList.indexOf(value);
+    if (idx === -1) throw new Error(`"${value}" not in list: [${optionsList.join(', ')}]`);
+
+    const rowHeight     = size.height;
+    const spinnerBottom = loc.y + size.height;
+    const opensUpward   = (screen.height - spinnerBottom) < (optionsList.length * rowHeight);
+    const finalTapX     = Math.floor(loc.x + size.width / 2);
+    let   finalTapY;
+
+    if (opensUpward) {
+        const reversedIdx = (optionsList.length - 1) - idx;
+        finalTapY = Math.floor(loc.y - (reversedIdx * rowHeight) - (rowHeight / 2));
+    } else {
+        finalTapY = Math.floor(spinnerBottom + (idx * rowHeight) + (rowHeight / 2));
+    }
+    finalTapY = Math.max(5, Math.min(finalTapY, screen.height - 5));
+
+    console.log(`📍 Coordinate fallback → tap(${finalTapX}, ${finalTapY})`);
+    await tapByCoords(driver, finalTapX, finalTapY);
+    console.log(`✅ Selected "${value}" via coordinates`);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  STANDARD FIELD HELPERS
+// ─────────────────────────────────────────────────────────────
 
 async function clickElementByText(driver, text) {
     console.log(`Looking for element with text: '${text}'...`);
@@ -56,433 +241,251 @@ async function clickFirstMemberButton(driver) {
 }
 
 async function scrollAndClickRegisterByName(driver, targetName) {
-    console.log(`Scrolling to find member: '${targetName}'...`);
-    const scrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text("${targetName}"))`;
-    const nameElement = await driver.$(`android=${scrollSelector}`);
-    await nameElement.waitForDisplayed({ timeout: 15000 });
+    console.log(`Manually scrolling to find main beneficiary: '${targetName}'...`);
+    let isFound = false;
+    let maxSwipes = 20;
 
-    const registerBtnXPath = `//*[@text='${targetName}']/ancestor::android.view.ViewGroup//android.widget.Button[@text='REGISTER']`;
-    const registerBtn = await driver.$(registerBtnXPath);
-    await registerBtn.waitForDisplayed({ timeout: 5000 });
-    await registerBtn.click();
-    console.log(`Successfully clicked the REGISTER button for '${targetName}'`);
+    const strictNameXPath = `//*[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/ll_title_tb_screening_list_bar']/*[@text='${targetName}']`;
+
+    for (let i = 0; i < maxSwipes; i++) {
+        const nameElements = await driver.$$(strictNameXPath);
+
+        if (nameElements.length > 0 && await nameElements[0].isDisplayed()) {
+            console.log(`✔ Found main beneficiary: '${targetName}' on screen after ${i} swipes.`);
+            isFound = true;
+            break;
+        }
+
+        console.log(`Beneficiary not found yet. Swiping up (Attempt ${i + 1}/${maxSwipes})...`);
+        const screen = await driver.getWindowRect();
+        const startX = Math.floor(screen.width / 2);
+        const startY = Math.floor(screen.height * 0.75);
+        const endY   = Math.floor(screen.height * 0.25);
+
+        await driver.performActions([{
+            type: 'pointer', id: 'finger1',
+            parameters: { pointerType: 'touch' },
+            actions: [
+                { type: 'pointerMove', duration: 0, x: startX, y: startY },
+                { type: 'pointerDown', button: 0 },
+                { type: 'pause', duration: 300 },
+                { type: 'pointerMove', duration: 1500, x: startX, y: endY },
+                { type: 'pointerUp', button: 0 }
+            ]
+        }]);
+        await driver.releaseActions();
+        await driver.pause(1500);
+    }
+
+    if (!isFound) {
+        throw new Error(`❌ Could not find main beneficiary '${targetName}' after ${maxSwipes} swipes.`);
+    }
+
+    const nameElements = await driver.$$(strictNameXPath);
+    const nameLoc  = await nameElements[0].getLocation();
+    const nameSize = await nameElements[0].getSize();
+
+    console.log(`📍 Name element found at y=${nameLoc.y}, height=${nameSize.height}`);
+
+    try {
+        const registerXPath =
+            `//*[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/ll_title_tb_screening_list_bar']` +
+            `/*[@text='${targetName}']` +
+            `/ancestor::*[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/cv_content']` +
+            `//android.widget.Button[@text='REGISTER']`;
+
+        const registerBtn = await driver.$(registerXPath);
+        await registerBtn.waitForDisplayed({ timeout: 5000 });
+
+        const btnLoc = await registerBtn.getLocation();
+        console.log(`📍 REGISTER button found at y=${btnLoc.y}`);
+
+        if (btnLoc.y < nameLoc.y) {
+            throw new Error(`REGISTER button (y=${btnLoc.y}) is above name (y=${nameLoc.y}) — wrong card!`);
+        }
+
+        await registerBtn.click();
+        console.log(`✔ Successfully clicked the REGISTER button for '${targetName}'`);
+        return;
+
+    } catch (e) {
+        console.log(`⚠️  Strategy 1 failed: ${e.message}. Falling back to coordinate tap...`);
+    }
+
+    const screen = await driver.getWindowRect();
+    const tapX = Math.floor(screen.width * 0.9);
+    const tapY = Math.floor(nameLoc.y + 280);
+
+    console.log(`📍 Coordinate fallback → tap(${tapX}, ${tapY})`);
+
+    if (tapY > screen.height) {
+        throw new Error(`❌ Calculated tap Y (${tapY}) exceeds screen height (${screen.height})`);
+    }
+
+    await tapByCoords(driver, tapX, tapY);
+    console.log(`✔ Tapped REGISTER for '${targetName}' via coordinate fallback`);
 }
 
-async function setVisitDate(driver, dateString) {
-    console.log(`Attempting to set Visit Date to: '${dateString}'...`);
+async function setDateViaCalendar(driver, fieldSelector, targetContentDesc, year) {
+    const field = await driver.$(fieldSelector);
+    await field.waitForDisplayed({ timeout: 10000 });
+    await field.click();
+    await driver.pause(2000);
 
+    const yearHeader = await driver.$("//*[@resource-id='android:id/date_picker_header_year']");
+    const currentYear = await yearHeader.getText();
+
+    if (currentYear !== year) {
+        await yearHeader.click();
+        await driver.pause(1000);
+        const yearSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text("${year}"))`;
+        const yearElement = await driver.$(`android=${yearSelector}`);
+        await yearElement.click();
+        await driver.pause(1000);
+    }
+
+    const daySelector = `new UiScrollable(new UiSelector().resourceId("android:id/day_picker_view_pager")).setAsHorizontalList().scrollIntoView(new UiSelector().description("${targetContentDesc}"))`;
+    const dayElement = await driver.$(`android=${daySelector}`);
+    await dayElement.waitForDisplayed({ timeout: 10000 });
+    await dayElement.click();
+
+    const okBtn = await driver.$("//*[@resource-id='android:id/button1']");
+    await okBtn.click();
+}
+
+async function parseDateString(dateString) {
     const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const parts = dateString.split("-");
     const day = parts[0].padStart(2, '0');
     const monthStr = months[parseInt(parts[1], 10) - 1];
     const year = parts[2];
+    return { targetContentDesc: `${day} ${monthStr} ${year}`, year };
+}
 
-    const targetContentDesc = `${day} ${monthStr} ${year}`;
-
-    const visitDateField = await driver.$("//android.widget.EditText[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/et']");
-    await visitDateField.waitForDisplayed({ timeout: 10000 });
-    await visitDateField.click();
-    console.log("Clicked Visit Date field. Waiting for calendar to open...");
-
-    await driver.pause(2000);
-
+async function setVisitDate(driver, dateString) {
     try {
-        const yearHeader = await driver.$("//*[@resource-id='android:id/date_picker_header_year']");
-        const currentYear = await yearHeader.getText();
-
-        if (currentYear !== year) {
-            console.log(`Changing year from ${currentYear} to ${year}...`);
-            await yearHeader.click();
-            await driver.pause(1000);
-
-            const yearSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text("${year}"))`;
-            const yearElement = await driver.$(`android=${yearSelector}`);
-            await yearElement.click();
-            await driver.pause(1000);
-        }
-
-        console.log(`Finding date: '${targetContentDesc}'...`);
-        const daySelector = `new UiScrollable(new UiSelector().resourceId("android:id/day_picker_view_pager")).setAsHorizontalList().scrollIntoView(new UiSelector().description("${targetContentDesc}"))`;
-        const dayElement = await driver.$(`android=${daySelector}`);
-
-        await dayElement.waitForDisplayed({ timeout: 10000 });
-        await dayElement.click();
-        console.log(`Selected day: ${targetContentDesc}`);
-
-        const okBtn = await driver.$("//*[@resource-id='android:id/button1']");
-        await okBtn.click();
-
-        console.log(`Successfully applied date '${dateString}' from calendar.`);
-
+        console.log(`Attempting to set Visit Date to: '${dateString}'...`);
+        const { targetContentDesc, year } = await parseDateString(dateString);
+        await setDateViaCalendar(driver, "//android.widget.EditText[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/et']", targetContentDesc, year);
+        console.log(`Successfully applied Visit Date '${dateString}'`);
     } catch (error) {
-        console.error("Failed to select the date inside the calendar picker:", error.message);
+        console.error("Failed to select Visit Date:", error.message);
     }
 }
 
-/**
- * Fills the Date of Test using the calendar picker
- */
 async function setDateOfTest(driver, dateString) {
     try {
         console.log(`Attempting to set Date of Test to: '${dateString}'...`);
-
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textStartsWith("Date of Test"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-        const parts = dateString.split("-");
-        const day = parts[0].padStart(2, '0');
-        const monthStr = months[parseInt(parts[1], 10) - 1];
-        const year = parts[2];
-
-        const targetContentDesc = `${day} ${monthStr} ${year}`;
-
-        const dateOfTestField = await driver.$(`//android.widget.EditText[contains(@hint, "Date of Test") or contains(@text, "Date of Test")]`);
-        await dateOfTestField.waitForDisplayed({ timeout: 10000 });
-        await dateOfTestField.click();
-        console.log("Clicked Date of Test field. Waiting for calendar to open...");
-
-        await driver.pause(2000);
-
-        const yearHeader = await driver.$("//*[@resource-id='android:id/date_picker_header_year']");
-        const currentYear = await yearHeader.getText();
-
-        if (currentYear !== year) {
-            console.log(`Changing year from ${currentYear} to ${year}...`);
-            await yearHeader.click();
-            await driver.pause(1000);
-
-            const yearSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text("${year}"))`;
-            const yearElement = await driver.$(`android=${yearSelector}`);
-            await yearElement.click();
-            await driver.pause(1000);
-        }
-
-        console.log(`Finding date: '${targetContentDesc}'...`);
-        const daySelector = `new UiScrollable(new UiSelector().resourceId("android:id/day_picker_view_pager")).setAsHorizontalList().scrollIntoView(new UiSelector().description("${targetContentDesc}"))`;
-        const dayElement = await driver.$(`android=${daySelector}`);
-
-        await dayElement.waitForDisplayed({ timeout: 10000 });
-        await dayElement.click();
-        console.log(`Selected day: ${targetContentDesc}`);
-
-        const okBtn = await driver.$("//*[@resource-id='android:id/button1']");
-        await okBtn.click();
-
-        console.log(`Successfully applied Date of Test '${dateString}' from calendar.`);
-
+        const { targetContentDesc, year } = await parseDateString(dateString);
+        await setDateViaCalendar(driver, `//android.widget.EditText[contains(@hint, "Date of Test") or contains(@text, "Date of Test")]`, targetContentDesc, year);
+        console.log(`Successfully applied Date of Test '${dateString}'`);
     } catch (error) {
-        console.error("Failed to select the Date of Test inside the calendar picker:", error.message);
+        console.error("Failed to select Date of Test:", error.message);
     }
 }
 
-/**
- * Fills the Date of Death using the calendar picker
- */
 async function setDateOfDeath(driver, dateString) {
     try {
         console.log(`Attempting to set Date of death to: '${dateString}'...`);
-
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textStartsWith("Date of death"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-        const parts = dateString.split("-");
-        const day = parts[0].padStart(2, '0');
-        const monthStr = months[parseInt(parts[1], 10) - 1];
-        const year = parts[2];
-
-        const targetContentDesc = `${day} ${monthStr} ${year}`;
-
-        const dateOfDeathField = await driver.$(`//android.widget.EditText[contains(@hint, "Date of death") or contains(@text, "Date of death")]`);
-        await dateOfDeathField.waitForDisplayed({ timeout: 10000 });
-        await dateOfDeathField.click();
-        console.log("Clicked Date of death field. Waiting for calendar to open...");
-
-        await driver.pause(2000);
-
-        const yearHeader = await driver.$("//*[@resource-id='android:id/date_picker_header_year']");
-        const currentYear = await yearHeader.getText();
-
-        if (currentYear !== year) {
-            console.log(`Changing year from ${currentYear} to ${year}...`);
-            await yearHeader.click();
-            await driver.pause(1000);
-
-            const yearSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text("${year}"))`;
-            const yearElement = await driver.$(`android=${yearSelector}`);
-            await yearElement.click();
-            await driver.pause(1000);
-        }
-
-        console.log(`Finding date: '${targetContentDesc}'...`);
-        const daySelector = `new UiScrollable(new UiSelector().resourceId("android:id/day_picker_view_pager")).setAsHorizontalList().scrollIntoView(new UiSelector().description("${targetContentDesc}"))`;
-        const dayElement = await driver.$(`android=${daySelector}`);
-
-        await dayElement.waitForDisplayed({ timeout: 10000 });
-        await dayElement.click();
-        console.log(`Selected day: ${targetContentDesc}`);
-
-        const okBtn = await driver.$("//*[@resource-id='android:id/button1']");
-        await okBtn.click();
-
-        console.log(`Successfully applied Date of death '${dateString}' from calendar.`);
-
+        const { targetContentDesc, year } = await parseDateString(dateString);
+        await setDateViaCalendar(driver, `//android.widget.EditText[contains(@hint, "Date of death") or contains(@text, "Date of death")]`, targetContentDesc, year);
+        console.log(`Successfully applied Date of death '${dateString}'`);
     } catch (error) {
-        console.error("Failed to select the Date of death inside the calendar picker:", error.message);
+        console.error("Failed to select Date of death:", error.message);
     }
 }
 
-/**
- * Fills the Beneficiary Status using coordinate mapping
- */
-async function fillBeneficiaryStatus(driver, statusText) {
-    try {
-        console.log(`Processing 'Beneficiary Status' Dropdown for: "${statusText}"...`);
+// ─────────────────────────────────────────────────────────────
+//  NEW REFACTORED DROPDOWN METHODS (Matches householdFormSteps.js format)
+// ─────────────────────────────────────────────────────────────
 
-        const dropdowns = await driver.$$("//*[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown']");
-
-        if (dropdowns.length > 0) {
-            console.log("⏳ Opening 'Beneficiary Status' Dropdown...");
-            await dropdowns[0].click();
-
-            await driver.pause(1500);
-
-            const STATUS_COORDS = {
-                'Not Applicable':         { x: 500, y: 600 },
-                'Recovering':             { x: 500, y: 700 },
-                'Cured':                  { x: 500, y: 800 },
-                'Death':                  { x: 500, y: 1000 },
-                'Recurrence of Symptoms': { x: 500, y: 1000 }
-            };
-
-            const coords = STATUS_COORDS[statusText];
-            if (coords) {
-                console.log(`⏳ Tapping coordinates X:${coords.x} Y:${coords.y} for '${statusText}'`);
-                await tapAt(driver, coords.x, coords.y);
-                console.log(`✔ Status updated to '${statusText}' via coordinates.`);
-            } else {
-                console.error(`❌ "${statusText}" is not defined in the coordinate map.`);
-            }
-
-            await driver.pause(1000);
-
-        } else {
-            console.log(`➡ 'Beneficiary Status' dropdown is not visible. Skipping.`);
-        }
-    } catch (error) {
-        console.error('❌ Error processing Beneficiary Status dropdown:', error.message);
-    }
+async function fillBeneficiaryStatus(driver, value) {
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Beneficiary Status"))');
+    await driver.pause(1000);
+    await clickSpinnerAndSelectOption(
+        driver,
+        "(//*[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[1]",
+        value,
+        ['Not Applicable', 'Recovering', 'Cured', 'Death', 'Recurrence of Symptoms']
+    );
+    console.log(`✅ Beneficiary Status: ${value}`);
 }
 
-/**
- * Fills the Reason for Death Dropdown using coordinate mapping
- */
-async function fillReasonForDeath(driver, reasonText) {
-    try {
-        console.log(`Processing 'Reason for Death' Dropdown for: "${reasonText}"...`);
-
-        const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Reason for Death"))`;
-        await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
-
-        const exactDropdown = await driver.$(`//android.widget.Spinner[contains(@hint, "Reason for Death") or contains(@text, "Reason for Death")]`);
-
-        if (await exactDropdown.isExisting()) {
-            console.log("⏳ Opening 'Reason for Death' Dropdown...");
-            await exactDropdown.click();
-
-            await driver.pause(1500);
-
-            const REASON_COORDS = {
-                'Fever':         { x: 500, y: 1200 },
-                'other Disease': { x: 500, y: 1300 },
-                'Other':         { x: 500, y: 1400 }
-            };
-
-            const coords = REASON_COORDS[reasonText];
-            if (coords) {
-                console.log(`⏳ Tapping coordinates X:${coords.x} Y:${coords.y} for '${reasonText}'`);
-                await tapAt(driver, coords.x, coords.y);
-                console.log(`✔ Reason for Death updated to '${reasonText}' via coordinates.`);
-            } else {
-                console.error(`❌ "${reasonText}" is not defined in the coordinate map.`);
-            }
-
-            await driver.pause(1000);
-
-        } else {
-            console.log(`➡ 'Reason for Death' dropdown is not visible. Skipping.`);
-        }
-    } catch (error) {
-        console.error('❌ Error processing Reason for Death dropdown:', error.message);
-    }
+async function fillReasonForDeath(driver, value) {
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Reason for Death"))');
+    await driver.pause(1000);
+    await clickSpinnerAndSelectOption(
+        driver,
+        '//android.widget.Spinner[contains(@hint, "Reason for Death") or contains(@text, "Reason for Death")]',
+        value,
+        ['Fever', 'other Disease', 'Other']
+    );
+    console.log(`✅ Reason for Death: ${value}`);
 }
+
+async function fillCaseStatus(driver, value) {
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Case Status"))');
+    await driver.pause(1000);
+    await clickSpinnerAndSelectOption(
+        driver,
+        "(//*[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[2]",
+        value,
+        ['Suspected', 'Confirmed', 'Not Confirmed', 'Treatment Started']
+    );
+    console.log(`✅ Case Status: ${value}`);
+}
+
+async function fillReferredTo(driver, value) {
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Referred To"))');
+    await driver.pause(1000);
+    await clickSpinnerAndSelectOption(
+        driver,
+        "//*[@text='Referred To' or @hint='Referred To'] | (//*[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[3]",
+        value,
+        ['Primary Health Centre', 'Community Health Centre', 'District Hospital', 'Medical College and Hospital', 'Referral Hospital', 'Other Private Hospital', 'Other']
+    );
+    console.log(`✅ Referred To: ${value}`);
+}
+
+async function fillPlaceOfDeath(driver, value) {
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Place of Death"))');
+    await driver.pause(1000);
+    await clickSpinnerAndSelectOption(
+        driver,
+        '//android.widget.Spinner[contains(@hint, "Place of Death") or contains(@text, "Place of Death")]',
+        value,
+        ['Home', 'Facility', 'Other']
+    );
+    console.log(`✅ Place of Death: ${value}`);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  REMAINING FORM ACTIONS
+// ─────────────────────────────────────────────────────────────
 
 async function fillOtherReasonOfDeath(driver, otherReasonText) {
     try {
         console.log(`Filling 'Other Reason of Death' field with: "${otherReasonText}"...`);
-
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Other Reason of Death"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
         const otherReasonField = await driver.$(`//android.widget.EditText[contains(@hint, "Other Reason of Death") or contains(@text, "Other Reason of Death")]`);
-
         if (await otherReasonField.isExisting()) {
             await otherReasonField.click();
             await otherReasonField.setValue(otherReasonText);
-
             if (await driver.isKeyboardShown()) {
                 await driver.hideKeyboard();
             }
             console.log(`✔ Typed '${otherReasonText}' into Other Reason of Death field.`);
-        } else {
-            console.log(`➡ 'Other Reason of Death' text field not found or visible. Skipping.`);
         }
     } catch (error) {
         console.error('❌ Error filling Other Reason of Death text field:', error.message);
-    }
-}
-
-async function fillCaseStatus(driver, caseText) {
-    try {
-        console.log(`Processing 'Case Status' Dropdown for: "${caseText}"...`);
-
-        const dropdowns = await driver.$$("//*[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown']");
-
-        if (dropdowns.length > 1) {
-            console.log("⏳ Opening 'Case Status' Dropdown...");
-            await dropdowns[1].click();
-
-            await driver.pause(1500);
-
-            const CASE_COORDS = {
-                'Suspected':         { x: 500, y: 850 },
-                'Confirmed':         { x: 500, y: 950 },
-                'Not Confirmed':     { x: 500, y: 1050 },
-                'Treatment Started': { x: 500, y: 1150 }
-            };
-
-            const coords = CASE_COORDS[caseText];
-            if (coords) {
-                console.log(`⏳ Tapping coordinates X:${coords.x} Y:${coords.y} for '${caseText}'`);
-                await tapAt(driver, coords.x, coords.y);
-                console.log(`✔ Case Status updated to '${caseText}' via coordinates.`);
-            } else {
-                console.error(`❌ "${caseText}" is not defined in the coordinate map.`);
-            }
-
-            await driver.pause(1000);
-
-        } else {
-            console.log(`➡ 'Case Status' dropdown is not visible. Skipping.`);
-        }
-    } catch (error) {
-        console.error('❌ Error processing Case Status dropdown:', error.message);
-    }
-}
-
-async function fillRDT(driver, resultText) {
-    try {
-        console.log(`Processing 'Rapid Diagnostic Test (RDT)' for: "${resultText}"...`);
-
-        const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Rapid Diagnostic Test"))`;
-        await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
-
-        const radioBtn = await driver.$(`//android.widget.RadioButton[@text="${resultText}"]`);
-
-        if (await radioBtn.isExisting()) {
-            await radioBtn.click();
-            console.log(`✔ RDT updated to '${resultText}'.`);
-        } else {
-            console.log(`➡ RDT option '${resultText}' not found or visible. Skipping.`);
-        }
-    } catch (error) {
-        console.error('❌ Error processing RDT radio button:', error.message);
-    }
-}
-
-async function fillReferredTo(driver, facilityText) {
-    try {
-        console.log(`Processing 'Referred To' Dropdown for: "${facilityText}"...`);
-
-        const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Referred To"))`;
-        await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
-
-        const dropdowns = await driver.$$("//*[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown']");
-
-        let targetDropdown;
-        const exactDropdown = await driver.$("//*[@text='Referred To' or @hint='Referred To']");
-
-        if (await exactDropdown.isExisting()) {
-            targetDropdown = exactDropdown;
-        } else if (dropdowns.length > 2) {
-            targetDropdown = dropdowns[2];
-        }
-
-        if (targetDropdown) {
-            console.log("⏳ Opening 'Referred To' Dropdown...");
-            await targetDropdown.click();
-
-            await driver.pause(1500);
-
-            const REFERRED_COORDS = {
-                'Primary Health Centre':        { x: 500, y: 1200 },
-                'Community Health Centre':      { x: 500, y: 1310 },
-                'District Hospital':            { x: 500, y: 1420 },
-                'Medical College and Hospital': { x: 500, y: 1530 },
-                'Referral Hospital':            { x: 500, y: 1640 },
-                'Other Private Hospital':       { x: 500, y: 1750 },
-                'Other':                        { x: 500, y: 1860 }
-            };
-
-            const coords = REFERRED_COORDS[facilityText];
-            if (coords) {
-                console.log(`⏳ Tapping coordinates X:${coords.x} Y:${coords.y} for '${facilityText}'`);
-                await tapAt(driver, coords.x, coords.y);
-                console.log(`✔ Referred To updated to '${facilityText}' via coordinates.`);
-            } else {
-                console.error(`❌ "${facilityText}" is not defined in the coordinate map.`);
-            }
-
-            await driver.pause(1000);
-
-        } else {
-            console.log(`➡ 'Referred To' dropdown is not visible. Skipping.`);
-        }
-    } catch (error) {
-        console.error('❌ Error processing Referred To dropdown:', error.message);
-    }
-}
-
-async function fillPlaceOfDeath(driver, placeText) {
-    try {
-        console.log(`Processing 'Place of Death' Dropdown for: "${placeText}"...`);
-
-        const placeDropdown = await driver.$(`//android.widget.Spinner[contains(@hint, "Place of Death") or contains(@text, "Place of Death")]`);
-
-        if (await placeDropdown.isExisting()) {
-            console.log("⏳ Opening 'Place of Death' Dropdown...");
-            await placeDropdown.click();
-            await driver.pause(1500);
-
-            const PLACE_COORDS = {
-                'Home':     { x: 500, y: 1050 },
-                'Facility': { x: 500, y: 1150 },
-                'Other':    { x: 500, y: 1250 }
-            };
-
-            const coords = PLACE_COORDS[placeText];
-            if (coords) {
-                console.log(`⏳ Tapping coordinates X:${coords.x} Y:${coords.y} for '${placeText}'`);
-                await tapAt(driver, coords.x, coords.y);
-                console.log(`✔ Place of Death updated to '${placeText}' via coordinates.`);
-            } else {
-                console.error(`❌ "${placeText}" is not defined in the coordinate map.`);
-            }
-            await driver.pause(1000);
-        }
-    } catch (error) {
-        console.error('❌ Error processing Place of Death dropdown:', error.message);
     }
 }
 
@@ -490,7 +493,6 @@ async function fillOtherPlaceOfDeath(driver, otherPlaceText) {
     try {
         console.log(`Filling 'Other Place of Death' field with: "${otherPlaceText}"...`);
         const otherField = await driver.$(`//android.widget.EditText[contains(@hint, "Other Place of Death")]`);
-
         if (await otherField.isExisting()) {
             await otherField.click();
             await otherField.setValue(otherPlaceText);
@@ -504,80 +506,88 @@ async function fillOtherPlaceOfDeath(driver, otherPlaceText) {
     }
 }
 
-async function main() {
+async function fillRDT(driver, resultText) {
+    try {
+        console.log(`Processing 'Rapid Diagnostic Test (RDT)' for: "${resultText}"...`);
+        const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Rapid Diagnostic Test"))`;
+        await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
+
+        const radioBtn = await driver.$(`//android.widget.RadioButton[@text="${resultText}"]`);
+        if (await radioBtn.isExisting()) {
+            await radioBtn.click();
+            console.log(`✔ RDT updated to '${resultText}'.`);
+        }
+    } catch (error) {
+        console.error('❌ Error processing RDT radio button:', error.message);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  MASTER FUNCTION
+// ─────────────────────────────────────────────────────────────
+
+async function main(data) {
     console.log("Initializing Appium session...");
     let driver;
 
     try {
         driver = await remote(wdioOptions);
 
-        await clickElementByText(driver, 'Disease Control');
-        await clickElementByText(driver, 'Kala Azar');
+        await clickElementByText(driver, data.diseaseCategory);
+        await clickElementByText(driver, data.diseaseType);
 
-        await searchForText(driver, 'ranudevi gg');
+        await searchForText(driver, data.searchName);
         await driver.pause(2000);
         await clickFirstMemberButton(driver);
         await driver.pause(2000);
 
-        await scrollAndClickRegisterByName(driver, 'GOLU JSBS');
+        await scrollAndClickRegisterByName(driver, data.targetMemberName);
 
-        await setVisitDate(driver, "15-03-2026");
+        await setVisitDate(driver, data.visitDate);
 
         // 1. Fill Beneficiary Status
-        const statusToSelect = 'Death';
-        await fillBeneficiaryStatus(driver, statusToSelect);
+        await fillBeneficiaryStatus(driver, data.beneficiaryStatus);
 
-        // 2. Conditional Form Logic based on 'Death'
-        if (statusToSelect === 'Death') {
-            console.log(`💡 '${statusToSelect}' selected. Triggering 'Death' workflow...`);
+        // 2. Conditional Form Logic
+        if (data.beneficiaryStatus === 'Death') {
+            console.log(`💡 '${data.beneficiaryStatus}' selected. Triggering 'Death' workflow...`);
 
-            await setDateOfDeath(driver, "16-03-2026");
+            await setDateOfDeath(driver, data.dateOfDeath);
+            await fillReasonForDeath(driver, data.reasonForDeath);
 
-            const reasonForDeathToSelect = "Other";
-            const placeToSelect = "Other"; // FIX: Variable now defined
-
-            await fillReasonForDeath(driver, reasonForDeathToSelect);
-
-            if (reasonForDeathToSelect === "Other") {
-                console.log(`💡 Reason for Death '${reasonForDeathToSelect}' selected. Triggering 'Other Reason' workflow...`);
-                await fillOtherReasonOfDeath(driver, "Unknown Complications");
+            if (data.reasonForDeath === "Other") {
+                console.log(`💡 Reason for Death '${data.reasonForDeath}' selected. Triggering 'Other Reason' workflow...`);
+                await fillOtherReasonOfDeath(driver, data.otherReasonText);
             }
 
-            await fillPlaceOfDeath(driver, placeToSelect);
+            await fillPlaceOfDeath(driver, data.placeOfDeath);
 
-            if (placeToSelect === "Other") {
-                await fillOtherPlaceOfDeath(driver, "Street Side");
+            if (data.placeOfDeath === "Other") {
+                await fillOtherPlaceOfDeath(driver, data.otherPlaceText);
             }
 
         } else {
-            console.log(`💡 '${statusToSelect}' selected. Triggering standard workflow...`);
+            console.log(`💡 '${data.beneficiaryStatus}' selected. Triggering standard workflow...`);
 
-            const caseStatusToSelect = 'Confirmed';
-            await fillCaseStatus(driver, caseStatusToSelect);
+            await fillCaseStatus(driver, data.caseStatus);
 
-            if (caseStatusToSelect) {
-                console.log(`💡 Case Status '${caseStatusToSelect}' selected. Triggering 'Referred To' workflow...`);
-                await fillReferredTo(driver, 'Primary Health Centre');
-            }
-
-            const requiresRDT = ['Cured', 'Not Applicable', 'Recovering', 'Recurrence of Symptoms'].includes(statusToSelect);
-            if (requiresRDT) {
-                console.log(`💡 '${statusToSelect}' selected. Triggering 'RDT' workflow...`);
-                const rdtResult = 'Positive';
-                await fillRDT(driver, rdtResult);
-
-                if (rdtResult === 'Positive' || rdtResult === 'Negative') {
-                    console.log(`💡 RDT is '${rdtResult}'. Triggering 'Date of Test' workflow...`);
-                    await setDateOfTest(driver, "16-03-2026");
-                }
+            if (data.caseStatus === 'Confirmed') {
+                console.log(`💡 Case Status 'Confirmed' selected. Triggering Kala Azar RDT, Date, and Referral...`);
+                await fillRDT(driver, data.rdtResult);
+                await setDateOfTest(driver, data.dateOfTest);
+                await fillReferredTo(driver, data.referredTo);
             }
         }
+
         console.log("Scrolling to Submit button...");
         const scrollSubmit = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text("Submit"))`;
         await driver.$(scrollSubmit).waitForExist({ timeout: 5000 });
 
-        console.log("Clicking Submit via coordinates [539, 1507]...");
-        await tapAt(driver, 539, 1507); // Centered X and Y based on bounds [446,1456][633,1558]
+        console.log('🔍 Clicking Submit via exact selector logic...');
+        const submitBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_submit")');
+        await submitBtn.waitForDisplayed({ timeout: 10000 });
+        await submitBtn.click();
+
         console.log("✔ Form Submitted successfully.");
 
     } catch (error) {
@@ -590,4 +600,5 @@ async function main() {
     }
 }
 
-main();
+// Pass the extracted data object into the execution block
+main(inputData);

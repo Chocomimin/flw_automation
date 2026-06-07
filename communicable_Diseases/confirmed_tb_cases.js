@@ -18,15 +18,192 @@ const wdOpts = {
 };
 
 const FORM_DATA = {
-    // ... existing fields ...
     regimenType: "Longer Regimen (18-24 Months)",
-    treatmentStartDate: { day: 23, month: 3, year: 2026 },
+    treatmentStartDate: { day:7, month: 6, year: 2026 },
 
     // Set Follow Up Date to a later date (e.g., March 15, 2026)
-    visitDate: { day: 23, month: 3, year: 2026 },
+    visitDate: { day: 7, month: 6, year: 2026 },
     adherenceToMedicines: "Regular", // Options: "Regular", "Irregular"
     anyDiscomfort: "No" // Options: "Yes", "No"
 };
+
+// ==========================================
+// 1. CORE DROPDOWN HELPERS (From Household Form)
+// ==========================================
+
+async function scrollSpinnerToMiddle(driver, spinnerSelector) {
+    try {
+        const spinner = await driver.$(spinnerSelector);
+        const loc = await spinner.getLocation();
+        const screen = await driver.getWindowRect();
+        const midY = screen.height / 2;
+
+        if (loc.y > midY + 100) {
+            console.log(`⬆️  Spinner at y=${loc.y}, scrolling toward middle...`);
+
+            const startY = Math.floor(screen.height * 0.7);
+            const endY = Math.floor(screen.height * 0.3);
+            const swipeX = Math.floor(screen.width / 2);
+
+            await driver.performActions([{
+                type: 'pointer', id: 'finger1',
+                parameters: { pointerType: 'touch' },
+                actions: [
+                    { type: 'pointerMove', duration: 0, x: swipeX, y: startY },
+                    { type: 'pointerDown', button: 0 },
+                    { type: 'pause', duration: 200 },
+                    { type: 'pointerMove', duration: 1000, x: swipeX, y: endY },
+                    { type: 'pointerUp', button: 0 }
+                ]
+            }]);
+            await driver.releaseActions();
+            await driver.pause(1500);
+        }
+    } catch (e) {
+        console.log('⚠️  scrollSpinnerToMiddle skipped:', e.message);
+    }
+}
+
+async function tapByCoords(driver, tapX, tapY) {
+    await driver.performActions([{
+        type: 'pointer', id: 'finger1',
+        parameters: { pointerType: 'touch' },
+        actions: [
+            { type: 'pointerMove', duration: 0, x: tapX, y: tapY },
+            { type: 'pointerDown', button: 0 },
+            { type: 'pause',       duration: 150 },
+            { type: 'pointerUp',   button: 0 }
+        ]
+    }]);
+    await driver.releaseActions();
+    await driver.pause(500);
+}
+
+async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optionsList) {
+    await scrollSpinnerToMiddle(driver, spinnerSelector);
+
+    const spinner = await driver.$(spinnerSelector);
+    await spinner.waitForDisplayed({ timeout: 10000 });
+
+    const loc  = await spinner.getLocation();
+    const size = await spinner.getSize();
+    console.log(`📍 Spinner @ (${loc.x}, ${loc.y}), size (${size.width}x${size.height})`);
+
+    const tapX = Math.floor(loc.x + size.width - 40);
+    const tapY = Math.floor(loc.y + size.height / 2);
+
+    // Ensure keyboard is hidden before tapping the dropdown to avoid layout shifts
+    try {
+        if (await driver.isKeyboardShown()) {
+            await driver.hideKeyboard();
+            await driver.pause(1000);
+        }
+    } catch (e) {}
+
+    console.log(`📍 Tapping dropdown arrow at (${tapX}, ${tapY})`);
+    await tapByCoords(driver, tapX, tapY);
+    await driver.pause(2000);
+
+    // STRATEGY 0: Direct XPath
+    try {
+        const item = await driver.$(`//*[@text="${value}"]`);
+        await item.waitForDisplayed({ timeout: 4000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via XPath`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  XPath strategy failed: ${e.message}`);
+    }
+
+    // STRATEGY 1: UiSelector
+    try {
+        const item = await driver.$(`android=new UiSelector().text("${value}")`);
+        await item.waitForDisplayed({ timeout: 3000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via UiSelector`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  UiSelector strategy failed: ${e.message}`);
+    }
+
+    // STRATEGY 2: Tag-by-tag XML parse
+    try {
+        const source = await driver.getPageSource();
+        const nodes = source.match(/<[^>]+>/g) || [];
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const textRegex = new RegExp(`(?:text|content-desc)="\\s*${escapedValue}\\s*"`);
+        let foundNode = null;
+
+        for (const node of nodes) {
+            if (textRegex.test(node) && node.includes('bounds=')) {
+                foundNode = node;
+                break;
+            }
+        }
+
+        if (foundNode) {
+            const boundsMatch = foundNode.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            if (boundsMatch) {
+                const tapX = Math.floor((parseInt(boundsMatch[1]) + parseInt(boundsMatch[3])) / 2);
+                const tapY = Math.floor((parseInt(boundsMatch[2]) + parseInt(boundsMatch[4])) / 2);
+                console.log(`📍 Found "${value}" in XML (tag parse) → tap(${tapX},${tapY})`);
+                await tapByCoords(driver, tapX, tapY);
+                console.log(`✅ Selected "${value}" via tag parse`);
+                return;
+            }
+        }
+        console.log(`⚠️  "${value}" not found via tag parse, trying regex strategy...`);
+    } catch (e) {
+        console.log(`⚠️  Tag parse failed: ${e.message}`);
+    }
+
+    // STRATEGY 3: Inline regex bounds
+    try {
+        const source = await driver.getPageSource();
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`text="${escapedValue}"[^/]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`);
+        const match = source.match(regex);
+
+        if (match) {
+            const tapX = Math.floor((parseInt(match[1]) + parseInt(match[3])) / 2);
+            const tapY = Math.floor((parseInt(match[2]) + parseInt(match[4])) / 2);
+            console.log(`📍 Found "${value}" via regex → tap(${tapX},${tapY})`);
+            await tapByCoords(driver, tapX, tapY);
+            console.log(`✅ Selected "${value}" via regex`);
+            return;
+        }
+        console.log(`⚠️  "${value}" not found via regex, trying coordinate fallback...`);
+    } catch (e) {
+        console.log(`⚠️  Regex strategy failed: ${e.message}`);
+    }
+
+    // STRATEGY 4: Coordinate fallback
+    const screen = await driver.getWindowRect();
+    const idx = optionsList.indexOf(value);
+    if (idx === -1) throw new Error(`"${value}" not in list: [${optionsList.join(', ')}]`);
+
+    const rowHeight     = size.height;
+    const spinnerBottom = loc.y + size.height;
+    const opensUpward   = (screen.height - spinnerBottom) < (optionsList.length * rowHeight);
+    const finalTapX     = Math.floor(loc.x + size.width / 2);
+    let   finalTapY;
+
+    if (opensUpward) {
+        const reversedIdx = (optionsList.length - 1) - idx;
+        finalTapY = Math.floor(loc.y - (reversedIdx * rowHeight) - (rowHeight / 2));
+    } else {
+        finalTapY = Math.floor(spinnerBottom + (idx * rowHeight) + (rowHeight / 2));
+    }
+    finalTapY = Math.max(5, Math.min(finalTapY, screen.height - 5));
+
+    console.log(`📍 Coordinate fallback → tap(${finalTapX}, ${finalTapY})`);
+    await tapByCoords(driver, finalTapX, finalTapY);
+    console.log(`✅ Selected "${value}" via coordinates`);
+}
+
+// ==========================================
+// 2. PAGE ACTIONS
+// ==========================================
 
 async function tapAt(driver, x, y) {
     await driver.action('pointer')
@@ -41,11 +218,9 @@ async function clickCommunicableDiseases(driver) {
     try {
         console.log("Attempting to click 'Communicable Diseases' module...");
 
-        // Scroll into view just in case the device screen is small and it's hidden further down
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Communicable Diseases"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        // XPath targets the clickable FrameLayout card that contains the text
         const communicableSelector = '//android.widget.FrameLayout[@clickable="true" and .//android.widget.TextView[@text="Communicable Diseases"]]';
         const element = await driver.$(communicableSelector);
 
@@ -62,7 +237,6 @@ async function clickConfirmedTBCases(driver) {
     try {
         console.log("Attempting to click 'Confirmed TB cases'...");
 
-        // XPath targets the clickable FrameLayout card that contains the text
         const confirmedTBSelector = '//android.widget.FrameLayout[@clickable="true" and .//android.widget.TextView[@text="Confirmed TB cases"]]';
         const element = await driver.$(confirmedTBSelector);
 
@@ -79,33 +253,24 @@ async function searchAndClickFollowUp(driver, searchText) {
     try {
         console.log(`Attempting to search for: "${searchText}"...`);
 
-        // 1. Locate and interact with the search bar
         const searchInputSelector = '//android.widget.EditText[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/searchView"]';
         const searchElement = await driver.$(searchInputSelector);
 
         await searchElement.waitForDisplayed({ timeout: 5000 });
         await searchElement.clearValue();
-
-        // Tap to bring up the keyboard
         await searchElement.click();
         await driver.pause(500);
 
-        // Type the search text using device keyboard
         await driver.keys(searchText.split(''));
 
-        // Hide keyboard after typing to ensure the list is fully visible
         if (await driver.isKeyboardShown()) {
             await driver.hideKeyboard();
         }
 
         console.log(`✔ Successfully typed "${searchText}". Waiting for list to filter...`);
-        await driver.pause(2000); // Give the app a moment to filter the list
+        await driver.pause(2000);
 
-        // 2. Locate and click the "FOLLOW UP" button
-        // Convert to uppercase to match the "REJ" format seen in your XML
         const upperSearchText = searchText.toUpperCase();
-
-        // XPath to find the card containing the name, and click the FOLLOW UP button inside that specific card
         const followUpButtonXPath = `//android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/cv_content" and .//android.widget.TextView[contains(translate(@text, 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'), '${upperSearchText}')]]//android.widget.Button[@text="FOLLOW UP"]`;
 
         const followUpBtn = await driver.$(followUpButtonXPath);
@@ -120,83 +285,36 @@ async function searchAndClickFollowUp(driver, searchText) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────
+// UPDATED Regimen Type Dropdown
+// ─────────────────────────────────────────────────────────────
 async function fillRegimenType(driver, regimenText) {
     try {
         console.log(`Processing 'Regimen Type' Dropdown for: "${regimenText}"...`);
-
-        // Scroll to the dropdown to ensure it's visible
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Regimen Type"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        // Target the spinner specifically looking for its hint/text
-        const spinnerXPath = `//android.widget.Spinner[@text="Regimen Type *" or @hint="Regimen Type *"]`;
-        const spinner = await driver.$(spinnerXPath);
+        const spinnerSelector = `//android.widget.Spinner[contains(@text, "Regimen Type") or contains(@hint, "Regimen Type")]`;
 
-        if (await spinner.isExisting()) {
-            console.log("⏳ Opening 'Regimen Type' Dropdown...");
+        const optionsList = [
+            'DS-TB (6 Months)',
+            'Shorter Regimen (9-12 Months)',
+            'Longer Regimen (18-24 Months)',
+            'BPaL Regimen (6 Months)',
+            'INH Mono (6 Month)'
+        ];
 
-            // Find the arrow button associated with this dropdown
-            const arrowXPath = `//android.widget.Spinner[contains(@text, "Regimen Type")]/following-sibling::android.widget.LinearLayout//android.widget.ImageButton[@content-desc="Show dropdown menu" or @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/text_input_end_icon"]`;
-            const dropdownArrow = await driver.$(arrowXPath);
-
-            if (await dropdownArrow.isExisting()) {
-                await dropdownArrow.click();
-                await driver.pause(1500); // Wait for the animation
-
-                // Standard safety check for keyboard obscuring the view
-                if (await driver.isKeyboardShown()) {
-                    await driver.hideKeyboard();
-                    await driver.pause(1000);
-                    await dropdownArrow.click();
-                    await driver.pause(1500);
-                }
-
-                // 1. Try native text click
-                const targetOption = await driver.$(`//*[@text="${regimenText}"]`);
-
-                if (await targetOption.isExisting()) {
-                    console.log(`⏳ Found text "${regimenText}", tapping it directly...`);
-                    await targetOption.click();
-                    console.log(`✔ Regimen Type updated to "${regimenText}".`);
-                } else {
-                    console.log(`⚠ Could not find text natively, falling back to coordinates...`);
-
-                    // 2. Coordinate fallback based on the layout
-                    // The dropdown starts around y: 476 based on the XML
-                    // Each item is typically ~110px high based on the screenshot
-                    const REGIMEN_COORDS = {
-                        'DS-TB (6 Months)':              { x: 500, y: 530 },
-                        'Shorter Regimen (9-12 Months)': { x: 500, y: 640 },
-                        'Longer Regimen (18-24 Months)': { x: 500, y: 750 },
-                        'BPaL Regimen (6 Months)':       { x: 500, y: 860 },
-                        'INH Mono (6 Month)':            { x: 500, y: 970 }
-                    };
-
-                    const coords = REGIMEN_COORDS[regimenText];
-                    if (coords) {
-                        console.log(`⏳ Tapping coordinates X:${coords.x} Y:${coords.y} for ${regimenText}`);
-                        await tapAt(driver, coords.x, coords.y);
-                        console.log(`✔ Regimen Type updated via coordinates.`);
-                    } else {
-                        console.error(`❌ "${regimenText}" is not defined in the coordinate map.`);
-                    }
-                }
-            } else {
-                console.error('❌ Could not find the dropdown arrow for Regimen Type.');
-            }
-        } else {
-            console.log(`➡ 'Regimen Type' dropdown is not visible. Skipping.`);
-        }
+        await clickSpinnerAndSelectOption(driver, spinnerSelector, regimenText, optionsList);
     } catch (error) {
         console.error('❌ Error processing Regimen Type dropdown:', error.message);
     }
 }
+// ─────────────────────────────────────────────────────────────
 
 async function selectDateFromPicker(driver, targetDay, targetMonth, targetYear) {
     try {
         console.log(`⏳ Setting date to: ${targetDay} ${targetMonth} ${targetYear}...`);
 
-        // 1. Select the Year
         const yearHeader = await driver.$('//android.widget.TextView[@resource-id="android:id/date_picker_header_year"]');
         const currentYear = await yearHeader.getText();
 
@@ -207,7 +325,6 @@ async function selectDateFromPicker(driver, targetDay, targetMonth, targetYear) 
             await driver.pause(500);
         }
 
-        // 2. Target the specific day content description
         const formattedDay = targetDay.toString().padStart(2, '0');
         const targetContentDesc = `${formattedDay} ${targetMonth} ${targetYear}`;
         const targetDayElement = await driver.$(`~${targetContentDesc}`);
@@ -217,7 +334,6 @@ async function selectDateFromPicker(driver, targetDay, targetMonth, targetYear) 
 
         let dayFound = false;
 
-        // 3. Scroll through months to find the day
         for (let i = 0; i < 12; i++) {
             if (await targetDayElement.isDisplayed()) {
                 await targetDayElement.click();
@@ -246,7 +362,6 @@ async function selectDateFromPicker(driver, targetDay, targetMonth, targetYear) 
             throw new Error(`Could not find the day matching: ${targetContentDesc}`);
         }
 
-        // 4. Click OK
         const okButton = await driver.$('//android.widget.Button[@resource-id="android:id/button1" and @text="OK"]');
         await okButton.click();
         console.log(`✔ Successfully confirmed the date: ${targetContentDesc}`);
@@ -260,11 +375,9 @@ async function fillTreatmentStartDate(driver, dateObj) {
     try {
         console.log(`Attempting to set 'Treatment Start Date' to ${dateObj.day}/${dateObj.month}/${dateObj.year}...`);
 
-        // Scroll into view if needed
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Treatment Start Date"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        // Locate and click the input field to open the calendar
         const dateInputSelector = '//android.widget.EditText[@hint="Treatment Start Date *"]';
         const dateInput = await driver.$(dateInputSelector);
 
@@ -273,31 +386,26 @@ async function fillTreatmentStartDate(driver, dateObj) {
 
         await driver.pause(1000);
 
-        // Array to convert numerical month (1-12) to full month name for the Android UI
         const monthNames = [
             "January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December"
         ];
-
-        // Arrays are 0-indexed, so we subtract 1 from the month number
         const targetMonthString = monthNames[dateObj.month - 1];
 
-        // Call the date picker helper with the extracted values
         await selectDateFromPicker(driver, dateObj.day, targetMonthString, dateObj.year);
 
     } catch (error) {
         console.error("❌ Failed to open 'Treatment Start Date' calendar:", error.message);
     }
 }
+
 async function fillFollowUpDate(driver, dateObj) {
     try {
         console.log(`Attempting to set 'Follow Up Dates' to ${dateObj.day}/${dateObj.month}/${dateObj.year}...`);
 
-        // Scroll into view if needed
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Follow Up Dates"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        // Locate and click the input field to open the calendar
         const dateInputSelector = '//android.widget.EditText[contains(@hint, "Follow Up Dates")]';
         const dateInput = await driver.$(dateInputSelector);
 
@@ -306,30 +414,26 @@ async function fillFollowUpDate(driver, dateObj) {
 
         await driver.pause(1000);
 
-        // Convert numerical month (1-12) to full month name for the Android UI
         const monthNames = [
             "January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December"
         ];
-
         const targetMonthString = monthNames[dateObj.month - 1];
 
-        // Call your existing date picker helper
         await selectDateFromPicker(driver, dateObj.day, targetMonthString, dateObj.year);
 
     } catch (error) {
         console.error("❌ Failed to open 'Follow Up Dates' calendar:", error.message);
     }
 }
+
 async function fillAdherenceToMedicines(driver, adherenceText) {
     try {
         console.log(`Attempting to set 'Adherence to Medicines' to '${adherenceText}'...`);
 
-        // Scroll into view
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Adherence to Medicines"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        // Find and click the specific radio button
         const radioXPath = `//android.widget.TextView[contains(@text, "Adherence to Medicines")]/../../android.widget.RadioGroup//android.widget.RadioButton[@text="${adherenceText}"]`;
         const radioBtn = await driver.$(radioXPath);
 
@@ -346,11 +450,9 @@ async function fillAnyDiscomfort(driver, discomfortText) {
     try {
         console.log(`Attempting to set 'Any discomfort' to '${discomfortText}'...`);
 
-        // Scroll into view
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Any discomfort"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        // Find and click the specific radio button
         const radioXPath = `//android.widget.TextView[contains(@text, "Any discomfort")]/../../android.widget.RadioGroup//android.widget.RadioButton[@text="${discomfortText}"]`;
         const radioBtn = await driver.$(radioXPath);
 
@@ -367,15 +469,10 @@ async function clickSubmitButton(driver) {
     try {
         console.log("Attempting to click Submit...");
 
-        // 1. Scroll further down to ensure the button is fully on screen
-        // By scrolling to "Follow-up History", we ensure Submit is well within view
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Follow-up History"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
-
-        // 2. Add a brief pause to allow the app's internal validation state to update
         await driver.pause(1000);
 
-        // 3. Target the button and click
         const submitBtnSelector = '//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_submit"]';
         const submitBtn = await driver.$(submitBtnSelector);
 
@@ -383,8 +480,6 @@ async function clickSubmitButton(driver) {
         await submitBtn.click();
 
         console.log("✔ Successfully clicked the Submit button.");
-
-        // 4. Wait to see if a popup appears or navigation happens
         await driver.pause(2000);
 
     } catch (error) {
@@ -396,24 +491,20 @@ async function clickVisitDateAndGoBack(driver) {
     try {
         console.log("Clicking 'Follow Up Dates' again to reopen calendar...");
 
-        // Scroll to ensure it's in view
         const scrollSelector = `android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Follow Up Dates"))`;
         await driver.$(scrollSelector).waitForExist({ timeout: 3000 }).catch(() => {});
 
-        // Click the field to open the calendar
         const dateInputSelector = '//android.widget.EditText[contains(@hint, "Follow Up Dates")]';
         const dateInput = await driver.$(dateInputSelector);
         await dateInput.click();
-        await driver.pause(1500); // Wait for the calendar animation to finish
+        await driver.pause(1500);
 
         console.log("Going back (dismissing the calendar)...");
 
-        // Option 1: Look for the native Android "CANCEL" button on the date picker and click it
         const cancelBtn = await driver.$('//android.widget.Button[@resource-id="android:id/button2"]');
         if (await cancelBtn.isExisting()) {
             await cancelBtn.click();
         } else {
-            // Option 2: Fallback to the Android hardware back button
             await driver.back();
         }
 
@@ -422,32 +513,44 @@ async function clickVisitDateAndGoBack(driver) {
         console.error("❌ Error clicking visit date and going back:", error.message);
     }
 }
+
+// ==========================================
+// 3. MAIN TEST EXECUTION
+// ==========================================
+
 async function runTest() {
     console.log("Initializing WebDriverIO session...");
     const driver = await remote(wdOpts);
 
     try {
-        await driver.pause(2000); // Give the Home screen time to fully load
+        await driver.pause(2000);
 
         // Step 1: Click Communicable Diseases
         await clickCommunicableDiseases(driver);
-        await driver.pause(1500); // Wait for the transition to the next screen
+        await driver.pause(1500);
 
         // Step 2: Click Confirmed TB cases
         await clickConfirmedTBCases(driver);
-        await driver.pause(1500); // Wait for the list/form to load
-        await searchAndClickFollowUp(driver, "rej");
         await driver.pause(1500);
+
+        await searchAndClickFollowUp(driver, "kavya sharma");
+        await driver.pause(1500);
+
         await fillRegimenType(driver, FORM_DATA.regimenType);
         await driver.pause(1000);
+
         await fillTreatmentStartDate(driver, FORM_DATA.treatmentStartDate);
         await driver.pause(1000);
+
         await fillFollowUpDate(driver, FORM_DATA.visitDate);
         await driver.pause(1000);
+
         await clickVisitDateAndGoBack(driver);
         await driver.pause(1000);
+
         await fillAdherenceToMedicines(driver, FORM_DATA.adherenceToMedicines);
         await driver.pause(1000);
+
         await fillAnyDiscomfort(driver, FORM_DATA.anyDiscomfort);
         await driver.pause(1000);
 
@@ -458,8 +561,10 @@ async function runTest() {
         console.error("❌ An error occurred during the test run:", error);
     } finally {
         console.log("Closing session...");
-        await driver.pause(2000);
-        await driver.deleteSession();
+        if (driver) {
+            await driver.pause(2000);
+            await driver.deleteSession();
+        }
     }
 }
 

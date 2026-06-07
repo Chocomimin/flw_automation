@@ -1,5 +1,32 @@
 const { remote } = require('webdriverio');
 
+// ─────────────────────────────────────────────────────────────
+//  TEST DATA CONFIGURATION
+// ─────────────────────────────────────────────────────────────
+const inputData = {
+    diseaseCategory: 'Disease Control',
+    diseaseType: 'Kala Azar', // Dynamically replaces 'AES/JE'
+    searchName: 'AJOY MAJHI',
+    targetMemberName: 'BISAL MAJHI',
+    visitDate: '15-03-2026',
+
+    // Status can be: 'Not Applicable', 'Recovering', 'Cured', 'Death', 'Recurrence of Symptoms'
+    beneficiaryStatus: 'Recovering',
+
+    // Death Workflow Inputs
+    dateOfDeath: '16-03-2026',
+    reasonForDeath: 'Other', // 'Fever', 'other Disease', 'Other'
+    otherReasonText: 'Unknown Complications',
+    placeOfDeath: 'Other', // 'Home', 'Facility', 'Other'
+    otherPlaceText: 'Street Side',
+
+    // Standard Workflow Inputs (If not 'Death')
+    caseStatus: 'Confirmed', // 'Suspected', 'Confirmed', 'Not Confirmed', 'Treatment Started'
+    referredTo: 'Primary Health Centre',
+    rdtResult: 'Positive', // 'Positive', 'Negative'
+    dateOfTest: '16-03-2026'
+};
+
 const capabilities = {
     platformName: 'Android',
     'appium:automationName': 'UiAutomator2',
@@ -17,17 +44,185 @@ const wdioOptions = {
     capabilities: capabilities
 };
 
-/**
- * Universal helper function to tap an exact pixel.
- */
-async function tapAt(driver, x, y) {
-    await driver.action('pointer')
-        .move({ duration: 0, x: x, y: y })
-        .down({ button: 0 })
-        .pause(100)
-        .up({ button: 0 })
-        .perform();
+// ─────────────────────────────────────────────────────────────
+//  CORE HELPERS — Extracted from Household Form
+// ─────────────────────────────────────────────────────────────
+
+// Helper to parse 'DD-MM-YYYY' strings into day, month, year integers
+function parseDateString(dateStr) {
+    const parts = dateStr.split('-');
+    return {
+        day: parseInt(parts[0], 10),
+        month: parseInt(parts[1], 10),
+        year: parseInt(parts[2], 10)
+    };
 }
+
+async function scrollSpinnerToMiddle(driver, spinnerSelector) {
+    try {
+        const spinner = await driver.$(spinnerSelector);
+        const loc = await spinner.getLocation();
+        const screen = await driver.getWindowRect();
+        const midY = screen.height / 2;
+
+        if (loc.y > midY + 100) {
+            console.log(`⬆️  Spinner at y=${loc.y}, scrolling toward middle...`);
+
+            const startY = Math.floor(screen.height * 0.7);
+            const endY = Math.floor(screen.height * 0.3);
+            const swipeX = Math.floor(screen.width / 2);
+
+            await driver.performActions([{
+                type: 'pointer', id: 'finger1',
+                parameters: { pointerType: 'touch' },
+                actions: [
+                    { type: 'pointerMove', duration: 0, x: swipeX, y: startY },
+                    { type: 'pointerDown', button: 0 },
+                    { type: 'pause', duration: 200 },
+                    { type: 'pointerMove', duration: 1000, x: swipeX, y: endY },
+                    { type: 'pointerUp', button: 0 }
+                ]
+            }]);
+            await driver.releaseActions();
+            await driver.pause(1500);
+        }
+    } catch (e) {
+        console.log('⚠️  scrollSpinnerToMiddle skipped:', e.message);
+    }
+}
+
+async function tapByCoords(driver, tapX, tapY) {
+    await driver.performActions([{
+        type: 'pointer', id: 'finger1',
+        parameters: { pointerType: 'touch' },
+        actions: [
+            { type: 'pointerMove', duration: 0, x: tapX, y: tapY },
+            { type: 'pointerDown', button: 0 },
+            { type: 'pause',       duration: 150 },
+            { type: 'pointerUp',   button: 0 }
+        ]
+    }]);
+    await driver.releaseActions();
+    await driver.pause(500);
+}
+
+async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optionsList) {
+    await scrollSpinnerToMiddle(driver, spinnerSelector);
+
+    const spinner = await driver.$(spinnerSelector);
+    await spinner.waitForDisplayed({ timeout: 10000 });
+
+    const loc  = await spinner.getLocation();
+    const size = await spinner.getSize();
+    console.log(`📍 Spinner @ (${loc.x}, ${loc.y}), size (${size.width}x${size.height})`);
+
+    const tapX = Math.floor(loc.x + size.width - 40);
+    const tapY = Math.floor(loc.y + size.height / 2);
+
+    console.log(`📍 Tapping dropdown arrow at (${tapX}, ${tapY})`);
+    await tapByCoords(driver, tapX, tapY);
+    await driver.pause(2000);
+
+    // STRATEGY 0: Direct XPath
+    try {
+        const item = await driver.$(`//*[@text="${value}"]`);
+        await item.waitForDisplayed({ timeout: 4000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via XPath`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  XPath strategy failed: ${e.message}`);
+    }
+
+    // STRATEGY 1: UiSelector
+    try {
+        const item = await driver.$(`android=new UiSelector().text("${value}")`);
+        await item.waitForDisplayed({ timeout: 3000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via UiSelector`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  UiSelector strategy failed: ${e.message}`);
+    }
+
+    // STRATEGY 2: Tag-by-tag XML parse
+    try {
+        const source = await driver.getPageSource();
+        const nodes = source.match(/<[^>]+>/g) || [];
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const textRegex = new RegExp(`(?:text|content-desc)="\\s*${escapedValue}\\s*"`);
+        let foundNode = null;
+
+        for (const node of nodes) {
+            if (textRegex.test(node) && node.includes('bounds=')) {
+                foundNode = node;
+                break;
+            }
+        }
+
+        if (foundNode) {
+            const boundsMatch = foundNode.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            if (boundsMatch) {
+                const tapX = Math.floor((parseInt(boundsMatch[1]) + parseInt(boundsMatch[3])) / 2);
+                const tapY = Math.floor((parseInt(boundsMatch[2]) + parseInt(boundsMatch[4])) / 2);
+                console.log(`📍 Found "${value}" in XML (tag parse) → tap(${tapX},${tapY})`);
+                await tapByCoords(driver, tapX, tapY);
+                console.log(`✅ Selected "${value}" via tag parse`);
+                return;
+            }
+        }
+        console.log(`⚠️  "${value}" not found via tag parse, trying regex strategy...`);
+    } catch (e) {
+        console.log(`⚠️  Tag parse failed: ${e.message}`);
+    }
+
+    // STRATEGY 3: Inline regex bounds
+    try {
+        const source = await driver.getPageSource();
+        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`text="${escapedValue}"[^/]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`);
+        const match = source.match(regex);
+
+        if (match) {
+            const tapX = Math.floor((parseInt(match[1]) + parseInt(match[3])) / 2);
+            const tapY = Math.floor((parseInt(match[2]) + parseInt(match[4])) / 2);
+            console.log(`📍 Found "${value}" via regex → tap(${tapX},${tapY})`);
+            await tapByCoords(driver, tapX, tapY);
+            console.log(`✅ Selected "${value}" via regex`);
+            return;
+        }
+        console.log(`⚠️  "${value}" not found via regex, trying coordinate fallback...`);
+    } catch (e) {
+        console.log(`⚠️  Regex strategy failed: ${e.message}`);
+    }
+
+    // STRATEGY 4: Coordinate fallback
+    const screen = await driver.getWindowRect();
+    const idx = optionsList.indexOf(value);
+    if (idx === -1) throw new Error(`"${value}" not in list: [${optionsList.join(', ')}]`);
+
+    const rowHeight     = size.height;
+    const spinnerBottom = loc.y + size.height;
+    const opensUpward   = (screen.height - spinnerBottom) < (optionsList.length * rowHeight);
+    const finalTapX     = Math.floor(loc.x + size.width / 2);
+    let   finalTapY;
+
+    if (opensUpward) {
+        const reversedIdx = (optionsList.length - 1) - idx;
+        finalTapY = Math.floor(loc.y - (reversedIdx * rowHeight) - (rowHeight / 2));
+    } else {
+        finalTapY = Math.floor(spinnerBottom + (idx * rowHeight) + (rowHeight / 2));
+    }
+    finalTapY = Math.max(5, Math.min(finalTapY, screen.height - 5));
+
+    console.log(`📍 Coordinate fallback → tap(${finalTapX}, ${finalTapY})`);
+    await tapByCoords(driver, finalTapX, finalTapY);
+    console.log(`✅ Selected "${value}" via coordinates`);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  EXISTING HELPERS
+// ─────────────────────────────────────────────────────────────
 
 async function clickElementByText(driver, text) {
     console.log(`Looking for element with text: '${text}'...`);
@@ -90,9 +285,6 @@ function pad(n) {
     return String(n).padStart(2, '0');
 }
 
-/**
- * Shared helper function to interact with Android's default DatePicker
- */
 async function selectDateInCalendar(driver, day, month, year) {
     console.log('Opened DatePicker dialog...');
     await driver.pause(1000);
@@ -206,114 +398,52 @@ async function fillDateOfDeathByCalendar(driver, day, month, year) {
     await selectDateInCalendar(driver, day, month, year);
 }
 
-async function fillBeneficiaryStatusByCoordinates(driver, statusText) {
+// ─────────────────────────────────────────────────────────────
+//  UPDATED REFACTORED DROPDOWN FUNCTIONS
+// ─────────────────────────────────────────────────────────────
+
+async function fillBeneficiaryStatus(driver, statusText) {
     try {
         console.log(`Opening 'Beneficiary Status' dropdown for: "${statusText}"...`);
+        const spinnerSelector = "(//android.widget.Spinner[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[1]";
+        const optionsList = ['Not Applicable', 'Recovering', 'Cured', 'Death', 'Recurrence of Symptoms'];
 
-        const dropdown = await driver.$("(//android.widget.Spinner[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[1]");
-        await dropdown.waitForDisplayed({ timeout: 10000 });
-        await dropdown.click();
-
-        await driver.pause(1500);
-
-        const STATUS_COORDS = {
-            'Not Applicable':         { x: 500, y: 600 },
-            'Recovering':             { x: 500, y: 700 },
-            'Cured':                  { x: 500, y: 900 },
-            'Death':                  { x: 500, y: 1000 },
-            'Recurrence of Symptoms': { x: 500, y: 1000 }
-        };
-
-        const target = STATUS_COORDS[statusText];
-
-        if (target) {
-            console.log(`Tapping ${statusText} at [${target.x}, ${target.y}]`);
-            await tapAt(driver, target.x, target.y);
-            console.log(`✔ Selected ${statusText}`);
-        } else {
-            console.error(`❌ Status "${statusText}" not found in coordinate map.`);
-        }
-
-        await driver.pause(1000);
-
+        await clickSpinnerAndSelectOption(driver, spinnerSelector, statusText, optionsList);
     } catch (error) {
-        console.error('❌ Error in fillBeneficiaryStatusByCoordinates:', error.message);
+        console.error('❌ Error in fillBeneficiaryStatus:', error.message);
     }
 }
 
-async function fillAesJeCaseStatusByCoordinates(driver, statusText) {
+// Renamed from fillAesJeCaseStatus to make it more generic for inputData.diseaseType
+async function fillCaseStatus(driver, statusText) {
     try {
-        console.log(`Opening 'AES / JE Case Status' dropdown for: "${statusText}"...`);
+        console.log(`Opening 'Case Status' dropdown for: "${statusText}"...`);
+        const spinnerSelector = "(//android.widget.Spinner[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[2]";
+        const optionsList = ['Suspected', 'Confirmed', 'Not Confirmed', 'Treatment Started'];
 
-        const dropdown = await driver.$("(//android.widget.Spinner[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[2]");
-        await dropdown.waitForDisplayed({ timeout: 10000 });
-        await dropdown.click();
-
-        await driver.pause(1500);
-
-        const AES_STATUS_COORDS = {
-            'Suspected':         { x: 500, y: 850 },
-            'Confirmed':         { x: 500, y: 950 },
-            'Not Confirmed':     { x: 500, y: 1050 },
-            'Treatment Started': { x: 500, y: 1150 }
-        };
-
-        const target = AES_STATUS_COORDS[statusText];
-
-        if (target) {
-            console.log(`Tapping ${statusText} at [${target.x}, ${target.y}]`);
-            await tapAt(driver, target.x, target.y);
-            console.log(`✔ Selected AES Status: ${statusText}`);
-        } else {
-            console.error(`❌ AES Status "${statusText}" not found in coordinate map.`);
-        }
-
-        await driver.pause(1000);
-
+        await clickSpinnerAndSelectOption(driver, spinnerSelector, statusText, optionsList);
     } catch (error) {
-        console.error('❌ Error in fillAesJeCaseStatusByCoordinates:', error.message);
+        console.error('❌ Error in fillCaseStatus:', error.message);
     }
 }
 
-async function fillReferredToByCoordinates(driver, statusText, otherInputText = "Other details") {
+async function fillReferredTo(driver, statusText, otherInputText = "Other details") {
     try {
         console.log(`Opening 'Referred To' dropdown for: "${statusText}"...`);
+        const spinnerSelector = "(//android.widget.Spinner[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[3]";
+        const optionsList = [
+            'Primary Health Centre', 'Community Health Centre', 'District Hospital',
+            'Medical College and Hospital', 'Referral Hospital', 'Other Private Hospital', 'Other'
+        ];
 
-        const dropdown = await driver.$("(//android.widget.Spinner[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[3]");
-        await dropdown.waitForDisplayed({ timeout: 10000 });
-        await dropdown.click();
-
-        await driver.pause(1500);
-
-        const REFERRED_TO_COORDS = {
-            'Primary Health Centre':        { x: 500, y: 1000 },
-            'Community Health Centre':      { x: 500, y: 1100 },
-            'District Hospital':            { x: 500, y: 1200 },
-            'Medical College and Hospital': { x: 500, y: 1300 },
-            'Referral Hospital':            { x: 500, y: 1400 },
-            'Other Private Hospital':       { x: 500, y: 1500 },
-            'Other':                        { x: 500, y: 1600 }
-        };
-
-        const target = REFERRED_TO_COORDS[statusText];
-
-        if (target) {
-            console.log(`Tapping ${statusText} at [${target.x}, ${target.y}]`);
-            await tapAt(driver, target.x, target.y);
-            console.log(`✔ Selected Referred To: ${statusText}`);
-        } else {
-            console.error(`❌ Referred To Status "${statusText}" not found in coordinate map.`);
-            return;
-        }
-
-        await driver.pause(1000);
+        await clickSpinnerAndSelectOption(driver, spinnerSelector, statusText, optionsList);
 
         if (statusText === 'Other') {
             console.log(`'Other' selected. Attempting to fill the text input field...`);
             const otherEditText = await driver.$("//android.widget.EditText[contains(@hint, 'Other')]");
             await otherEditText.waitForDisplayed({ timeout: 5000 });
             await otherEditText.click();
-            await driver.pause(1000); // allow keyboard to show
+            await driver.pause(1000);
             await otherEditText.setValue(otherInputText);
 
             try {
@@ -323,127 +453,64 @@ async function fillReferredToByCoordinates(driver, statusText, otherInputText = 
             console.log(`✔ Filled 'Other' text field with: ${otherInputText}`);
             await driver.pause(1000);
         }
-
     } catch (error) {
-        console.error('❌ Error in fillReferredToByCoordinates:', error.message);
+        console.error('❌ Error in fillReferredTo:', error.message);
     }
 }
 
-/**
- * Updated function to handle the 'Place of Death' text input via keyboard
- */
-async function fillPlaceOfDeathByCoordinates(driver, placeText, otherInputText = "En route to hospital") {
+async function fillPlaceOfDeath(driver, placeText, otherInputText = "En route to hospital") {
     try {
         console.log(`Opening 'Place of Death' dropdown for: "${placeText}"...`);
+        const spinnerSelector = "(//android.widget.Spinner[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[2]";
+        const optionsList = ['Home', 'Facility', 'Other'];
 
-        const dropdown = await driver.$("(//android.widget.Spinner[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[2]");
-        await dropdown.waitForDisplayed({ timeout: 10000 });
-        await dropdown.click();
-
-        await driver.pause(1500);
-
-        const PLACE_COORDS = {
-            'Home':     { x: 500, y: 1000 },
-            'Facility': { x: 500, y: 1100 },
-            'Other':    { x: 500, y: 1200 }
-        };
-
-        const target = PLACE_COORDS[placeText];
-
-        if (target) {
-            console.log(`Tapping ${placeText} at [${target.x}, ${target.y}]`);
-            await tapAt(driver, target.x, target.y);
-            console.log(`✔ Selected Place of Death: ${placeText}`);
-        } else {
-            console.error(`❌ Place of Death "${placeText}" not found in coordinate map.`);
-            return;
-        }
-
-        await driver.pause(1000);
+        await clickSpinnerAndSelectOption(driver, spinnerSelector, placeText, optionsList);
 
         if (placeText === 'Other') {
             console.log(`'Other' selected. Attempting to fill using keyboard...`);
-
             const otherPlaceField = await driver.$("//android.widget.EditText[contains(@hint, 'Other Place of Death') or contains(@text, 'Other Place of Death')]");
             await otherPlaceField.waitForDisplayed({ timeout: 5000 });
-
-            // Explicitly clicking the field to trigger the on-screen keyboard
             await otherPlaceField.click();
             await driver.pause(1000);
             await otherPlaceField.setValue(otherInputText);
 
-            // Hiding keyboard to avoid obscuring the Submit button
             try {
-                if (await driver.isKeyboardShown()) {
-                    await driver.hideKeyboard();
-                }
+                if (await driver.isKeyboardShown()) await driver.hideKeyboard();
             } catch (e) { }
 
             console.log(`✔ Filled 'Other Place of Death' field with: ${otherInputText}`);
             await driver.pause(1000);
         }
-
     } catch (error) {
-        console.error('❌ Error in fillPlaceOfDeathByCoordinates:', error.message);
+        console.error('❌ Error in fillPlaceOfDeath:', error.message);
     }
 }
 
-/**
- * Updated function to handle the 'Reason for Death' text input via keyboard
- */
-async function fillReasonForDeathByCoordinates(driver, reasonText, otherInputText = "Other illness") {
+async function fillReasonForDeath(driver, reasonText, otherInputText = "Other illness") {
     try {
         console.log(`Opening 'Reason for Death' dropdown for: "${reasonText}"...`);
+        const spinnerSelector = "(//android.widget.Spinner[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[3]";
+        const optionsList = ['Fever', 'other Disease', 'Other'];
 
-        const dropdown = await driver.$("(//android.widget.Spinner[@resource-id='org.piramalswasthya.sakhi.saksham.uat:id/actv_rv_dropdown'])[3]");
-        await dropdown.waitForDisplayed({ timeout: 10000 });
-        await dropdown.click();
-
-        await driver.pause(1500);
-
-        const REASON_COORDS = {
-            'Fever':         { x: 500, y: 1200 },
-            'other Disease': { x: 500, y: 1300 },
-            'Other':         { x: 500, y: 1400 }
-        };
-
-        const target = REASON_COORDS[reasonText];
-
-        if (target) {
-            console.log(`Tapping ${reasonText} at [${target.x}, ${target.y}]`);
-            await tapAt(driver, target.x, target.y);
-            console.log(`✔ Selected Reason for Death: ${reasonText}`);
-        } else {
-            console.error(`❌ Reason "${reasonText}" not found in coordinate map.`);
-            return;
-        }
-
-        await driver.pause(1000);
+        await clickSpinnerAndSelectOption(driver, spinnerSelector, reasonText, optionsList);
 
         if (reasonText === 'Other') {
             console.log(`'Other' selected. Attempting to fill using keyboard...`);
-
             const otherReasonField = await driver.$("//android.widget.EditText[contains(@hint, 'Other Reason of Death') or contains(@text, 'Other Reason of Death')]");
             await otherReasonField.waitForDisplayed({ timeout: 5000 });
-
-            // Explicitly clicking the field to trigger the on-screen keyboard
             await otherReasonField.click();
             await driver.pause(1000);
             await otherReasonField.setValue(otherInputText);
 
-            // Hiding keyboard to avoid obscuring the Submit button
             try {
-                if (await driver.isKeyboardShown()) {
-                    await driver.hideKeyboard();
-                }
+                if (await driver.isKeyboardShown()) await driver.hideKeyboard();
             } catch (e) { }
 
             console.log(`✔ Filled 'Other Reason of Death' field with: ${otherInputText}`);
             await driver.pause(1000);
         }
-
     } catch (error) {
-        console.error('❌ Error in fillReasonForDeathByCoordinates:', error.message);
+        console.error('❌ Error in fillReasonForDeath:', error.message);
     }
 }
 
@@ -456,6 +523,10 @@ async function submitForm(driver) {
     await driver.pause(2000);
 }
 
+// ─────────────────────────────────────────────────────────────
+//  MAIN
+// ─────────────────────────────────────────────────────────────
+
 async function main() {
     console.log("Initializing Appium session...");
     let driver;
@@ -463,43 +534,51 @@ async function main() {
     try {
         driver = await remote(wdioOptions);
 
-        await clickElementByText(driver, 'Disease Control');
-        await clickElementByText(driver, 'AES/JE');
+        // 1. Driven dynamically by inputData.diseaseCategory & inputData.diseaseType
+        await clickElementByText(driver, inputData.diseaseCategory);
+        await clickElementByText(driver, inputData.diseaseType);
 
-        await searchForTextWithKeyboard(driver, 'ptest hhhh');
+        // 2. Driven dynamically by inputData.searchName & inputData.targetMemberName
+        await searchForTextWithKeyboard(driver, inputData.searchName);
         await driver.pause(2000);
 
-        await clickMembersByHouseholdName(driver, 'PTEST HHHH');
+        await clickMembersByHouseholdName(driver, inputData.searchName);
         await driver.pause(2000);
 
-        await scrollAndClickRegisterForMember(driver, 'PTEST HHHH');
+        await scrollAndClickRegisterForMember(driver, inputData.targetMemberName);
         await driver.pause(2000);
 
-        await fillVisitDateByCalendar(driver, 20, 3, 2026);
+        // 3. Parse Visit Date & invoke Calendar
+        const visit = parseDateString(inputData.visitDate);
+        await fillVisitDateByCalendar(driver, visit.day, visit.month, visit.year);
 
-        // --- Status Configuration ---
-        const currentBeneficiaryStatus = 'Death'; // Switch status here to test different flows
-        await fillBeneficiaryStatusByCoordinates(driver, currentBeneficiaryStatus);
+        // --- Status Configuration from inputData ---
+        await fillBeneficiaryStatus(driver, inputData.beneficiaryStatus);
 
         // --- Branch Logic Based on Selected Status ---
-        if (currentBeneficiaryStatus === 'Death') {
+        if (inputData.beneficiaryStatus === 'Death') {
             console.log(`Condition met: Beneficiary Status is 'Death'. Proceeding to fill Date, Place, and Reason of Death.`);
 
             await driver.pause(1000);
-            await fillDateOfDeathByCalendar(driver, 26, 3, 2026);
 
-            await fillReasonForDeathByCoordinates(driver, 'Other', 'Severe complications');
-            await fillPlaceOfDeathByCoordinates(driver, 'Other', 'En route to hospital');
+            const death = parseDateString(inputData.dateOfDeath);
+            await fillDateOfDeathByCalendar(driver, death.day, death.month, death.year);
+
+            await fillReasonForDeath(driver, inputData.reasonForDeath, inputData.otherReasonText);
+            await fillPlaceOfDeath(driver, inputData.placeOfDeath, inputData.otherPlaceText);
 
         } else {
             const targetStatuses = ['Cured', 'Recurrence of Symptoms', 'Recovering', 'Not Applicable'];
-            if (targetStatuses.includes(currentBeneficiaryStatus)) {
-                console.log(`Condition met: Beneficiary Status is '${currentBeneficiaryStatus}'. Proceeding to fill subsequent forms.`);
+            if (targetStatuses.includes(inputData.beneficiaryStatus)) {
+                console.log(`Condition met: Beneficiary Status is '${inputData.beneficiaryStatus}'. Proceeding to fill subsequent forms.`);
 
-                await fillAesJeCaseStatusByCoordinates(driver, 'Confirmed');
-                await fillReferredToByCoordinates(driver, 'Other', 'Private clinic downtown');
+                await fillCaseStatus(driver, inputData.caseStatus);
+                await fillReferredTo(driver, inputData.referredTo, "Details if 'Other' selected");
+
+                // Note: If you have additional dropdown UI interactions for `rdtResult` and `dateOfTest`,
+                // you would hook them up right here using `inputData.rdtResult` & `inputData.dateOfTest`.
             } else {
-                console.log(`Condition NOT met: Beneficiary Status '${currentBeneficiaryStatus}' does not trigger subsequent selections.`);
+                console.log(`Condition NOT met: Beneficiary Status '${inputData.beneficiaryStatus}' does not trigger subsequent selections.`);
             }
         }
 

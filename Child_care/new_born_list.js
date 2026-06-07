@@ -84,7 +84,7 @@ async function pickDateFromCalendar(driver, dateObj) {
     await (await driver.$('android=new UiSelector().resourceId("android:id/datePicker")')).waitForDisplayed({ timeout: 5000 });
 
     await navigateToMonth(driver, month, year);
-  
+
     const formattedDay = String(day);
     const dayToClick = await driver.$(`android=new UiSelector().text("${formattedDay}").clickable(true)`);
     await dayToClick.click();
@@ -94,7 +94,7 @@ async function pickDateFromCalendar(driver, dateObj) {
     await okBtn.click();
 }
 
-// ── App Navigation & HBNC Form ────────────────────────────────────────────────
+// ── App Navigation & Search ───────────────────────────────────────────────────
 
 async function clickChildCare(driver) {
     const childCareXPath = `//android.widget.TextView[@text="Child Care"]/parent::android.view.ViewGroup/parent::android.widget.FrameLayout`;
@@ -112,6 +112,41 @@ async function clickGridModule(driver, moduleName) {
     console.log(`Successfully clicked on the '${moduleName}' module.`);
 }
 
+// ── NEW: Search Functionality ──
+async function searchName(driver, nameToSearch) {
+    console.log(`Processing search for name: "${nameToSearch}"...`);
+
+    // 1. Target the search text field
+    const searchInputXPath = `//android.widget.EditText[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/searchView"]`;
+    const searchInput = await driver.$(searchInputXPath);
+    await searchInput.waitForDisplayed({ timeout: 5000 });
+
+    // 2. Click, clear any existing text, and type the name
+    await searchInput.click();
+    await driver.pause(500);
+    await searchInput.clearValue();
+    await searchInput.setValue(nameToSearch);
+    await driver.pause(500);
+
+    // 3. Click the explicit Search button (magnifying glass icon)
+    const searchBtnXPath = `//android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/ib_search"]`;
+    const searchBtn = await driver.$(searchBtnXPath);
+    if (await searchBtn.isExisting()) {
+        await searchBtn.click();
+    } else if (await driver.isKeyboardShown()) {
+        // Fallback: hit Enter key if button isn't found
+        await driver.pressKeyCode(66);
+    }
+
+    // 4. Hide keyboard to reveal the filtered list
+    if (await driver.isKeyboardShown()) {
+        await driver.hideKeyboard();
+    }
+
+    console.log(`✔ Search for "${nameToSearch}" completed. Waiting for list to update...`);
+    await driver.pause(2000); // Give the UI a moment to filter the RecyclerView
+}
+
 async function clickHBNCButton(driver) {
     const hbncButtonXPath = `//android.widget.Button[@text="HBNC"]`;
     const hbncButton = await driver.$(hbncButtonXPath);
@@ -119,6 +154,8 @@ async function clickHBNCButton(driver) {
     await hbncButton.click();
     console.log('Successfully clicked on the HBNC button.');
 }
+
+// ── HBNC Form ─────────────────────────────────────────────────────────────────
 
 async function clickAddVisitForDay(driver, dayText) {
     const addVisitBtnXPath = `//android.widget.TextView[@text="${dayText}"]/parent::android.widget.LinearLayout//android.widget.Button[@text="Add Visit"]`;
@@ -143,7 +180,6 @@ async function handleVisitDate(driver, expectedDateString) {
         await visitDateInput.click();
         await driver.pause(1000);
 
-        // Convert the "DD-MM-YYYY" string into the object format the calendar function expects
         const parts = expectedDateString.split('-');
         const dateObj = {
             day: parseInt(parts[0], 10),
@@ -154,18 +190,14 @@ async function handleVisitDate(driver, expectedDateString) {
         await pickDateFromCalendar(driver, dateObj);
     }
 }
+
 async function handleIsBabyAlive(driver, expectedInput) {
     console.log(`Processing "Is the Baby alive? *" field... Expected: ${expectedInput}`);
 
-    // Standardize input to match the UI text exactly ('Yes' or 'No')
     const targetOption = expectedInput.toLowerCase() === 'no' ? 'No' : 'Yes';
-
-    // XPath finds the exact radio button (Yes/No) that belongs to the "Is the Baby alive?" question
     const radioBtnXPath = `//android.widget.TextView[@text="Is the Baby alive? *"]/following-sibling::android.widget.FrameLayout//android.widget.RadioButton[@text="${targetOption}"]`;
-
     const radioButton = await driver.$(radioBtnXPath);
 
-    // Wait for the field to be visible on screen
     await radioButton.waitForDisplayed({ timeout: 5000 }).catch(() => null);
 
     if (await radioButton.isExisting()) {
@@ -187,7 +219,6 @@ async function handleIsBabyAlive(driver, expectedInput) {
 async function fillBabyWeight(driver, weightInGrams) {
     console.log(`Processing "Baby Weight (Gram) *" field... Expected: ${weightInGrams}`);
 
-    // Find the input field using the hint text from the XML
     const weightFieldXPath = `//android.widget.EditText[contains(@hint, "weight in gram")]`;
     const weightField = await driver.$(weightFieldXPath);
 
@@ -197,7 +228,6 @@ async function fillBabyWeight(driver, weightInGrams) {
         const currentText = await weightField.getText();
         const hintText = 'Enter weight in gram (e.g. 1000)';
 
-        // Check if the field is empty, showing the hint, or has a different value
         if (!currentText || currentText.trim() === '' || currentText.trim() === hintText) {
             console.log('➡ Field is empty. Entering weight...');
             await weightField.click();
@@ -231,13 +261,13 @@ async function fillBabyWeight(driver, weightInGrams) {
         console.error('❌ Could not find the "Baby Weight (Gram) *" text field.');
     }
 }
+
 async function selectRadioOption(driver, fieldLabel, expectedOption) {
     console.log(`Processing "${fieldLabel}" field... Expected: ${expectedOption}`);
 
     const labelXPath = `//android.widget.TextView[contains(@text, "${fieldLabel}")]`;
     let labelExists = false;
 
-    // Scroll down up to 5 times to find the field (since the page is long)
     for (let i = 0; i < 5; i++) {
         try {
             const labelEl = await driver.$(labelXPath);
@@ -247,7 +277,6 @@ async function selectRadioOption(driver, fieldLabel, expectedOption) {
             }
         } catch (e) { }
 
-        // Swipe up to scroll down
         const size = await driver.getWindowRect();
         await driver.performActions([{
             type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
@@ -268,7 +297,6 @@ async function selectRadioOption(driver, fieldLabel, expectedOption) {
         return;
     }
 
-    // Locate the exact radio button under the specific label
     const radioBtnXPath = `//android.widget.TextView[contains(@text, "${fieldLabel}")]/following-sibling::android.widget.FrameLayout//android.widget.RadioButton[@text="${expectedOption}"]`;
     const radioButton = await driver.$(radioBtnXPath);
 
@@ -295,7 +323,6 @@ async function fillTemperature(driver, tempValue) {
     let tempFieldExists = false;
     let tempField;
 
-    // ✅ Scroll down up to 5 times to find the Temperature field
     for (let i = 0; i < 5; i++) {
         try {
             tempField = await driver.$(tempFieldXPath);
@@ -305,7 +332,6 @@ async function fillTemperature(driver, tempValue) {
             }
         } catch (e) { }
 
-        // Swipe up to scroll down
         const size = await driver.getWindowRect();
         await driver.performActions([{
             type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
@@ -329,7 +355,6 @@ async function fillTemperature(driver, tempValue) {
     const currentText = await tempField.getText();
     const hintText = 'e.g. 98.6';
 
-    // Check if the field is empty, showing the hint, or has a different value
     if (!currentText || currentText.trim() === '' || currentText.trim() === hintText) {
         console.log('➡ Temperature field is empty. Entering value...');
         await tempField.click();
@@ -360,6 +385,7 @@ async function fillTemperature(driver, tempValue) {
         console.log(`✔ "Temperature" updated successfully to: ${tempValue}`);
     }
 }
+
 async function fillUmbilicalStump(driver, expectedOption) {
     console.log(`Processing "Condition of Umbilical Stump" field... Expected: ${expectedOption}`);
 
@@ -367,7 +393,6 @@ async function fillUmbilicalStump(driver, expectedOption) {
     let fieldExists = false;
     let field;
 
-    // Scroll down up to 5 times to find the field
     for (let i = 0; i < 5; i++) {
         try {
             field = await driver.$(fieldXPath);
@@ -377,7 +402,6 @@ async function fillUmbilicalStump(driver, expectedOption) {
             }
         } catch (e) { }
 
-        // Swipe up to scroll down
         const size = await driver.getWindowRect();
         await driver.performActions([{
             type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
@@ -398,7 +422,6 @@ async function fillUmbilicalStump(driver, expectedOption) {
         return;
     }
 
-    // Check the current selected value
     const currentText = await field.getText();
 
     if (currentText.trim() === expectedOption.trim()) {
@@ -406,11 +429,9 @@ async function fillUmbilicalStump(driver, expectedOption) {
     } else {
         console.log(`➡ Current value ("${currentText}") does not match input. Clicking to change...`);
 
-        // Click to open the dropdown list
         await field.click();
-        await driver.pause(1500); // Wait for the dialog to appear
+        await driver.pause(1500);
 
-        // Find the desired option in the ListView popup
         const optionXPath = `//android.widget.TextView[@resource-id="android:id/text1" and @text="${expectedOption}"]`;
         const optionElement = await driver.$(optionXPath);
 
@@ -420,7 +441,6 @@ async function fillUmbilicalStump(driver, expectedOption) {
             await driver.pause(1000);
         } else {
             console.error(`❌ Could not find option "${expectedOption}" in the dialog list. Ensure the spelling matches exactly.`);
-            // Tap outside or back button to close dialog if it failed, preventing the script from getting stuck
             await driver.pressKeyCode(4); // Android Back Button
         }
     }
@@ -429,7 +449,6 @@ async function fillUmbilicalStump(driver, expectedOption) {
 async function clickSubmit(driver) {
     console.log('Processing Submit button...');
 
-    // Using both resource-id and text for a robust locator
     const submitBtnXPath = `//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btnSave" and @text="Submit"]`;
     const submitBtn = await driver.$(submitBtnXPath);
 
@@ -441,6 +460,7 @@ async function clickSubmit(driver) {
         console.error('❌ Could not find or click the "Submit" button. It might be hidden or disabled.');
     }
 }
+
 async function runTest() {
     let driver;
     try {
@@ -449,13 +469,16 @@ async function runTest() {
         // Sequence of actions
         await clickChildCare(driver);
         await clickGridModule(driver, "Newborn list");
-
         await driver.pause(2000);
+
+        // ── NEW: Trigger the search to filter the newborn list
+        await searchName(driver, "SWEETY"); // Change this variable to any name you need to search for
+        await driver.pause(1000);
+
         await clickHBNCButton(driver);
-
         await driver.pause(2000);
-        await clickAddVisitForDay(driver, "1st Day");
 
+        await clickAddVisitForDay(driver, "1st Day");
         await driver.pause(2000);
 
         // Previous Fields
@@ -463,21 +486,20 @@ async function runTest() {
         await handleIsBabyAlive(driver, "Yes");
         await fillBabyWeight(driver, 2500);
 
-        // ── NEW: Fill all Radio Button Fields ─────────────────────────
+        // Fill all Radio Button Fields
+        await selectRadioOption(driver, "Urine passed", "Yes");
+        await selectRadioOption(driver, "Stool passed", "Yes");
+        await selectRadioOption(driver, "Diarrhoea", "No");
+        await selectRadioOption(driver, "Vomiting", "No");
+        await selectRadioOption(driver, "Convulsions", "No");
 
-        await selectRadioOption(driver, "Urine passed", "Yes"); // Options: Yes, No
-        await selectRadioOption(driver, "Stool passed", "Yes"); // Options: Yes, No
-        await selectRadioOption(driver, "Diarrhoea", "No");     // Options: Yes, No
-        await selectRadioOption(driver, "Vomiting", "No");      // Options: Yes, No
-        await selectRadioOption(driver, "Convulsions", "No");   // Options: Yes, No
-
-        await selectRadioOption(driver, "Activity", "Good");    // Options: Good, Lethargic
-        await selectRadioOption(driver, "Sucking", "Good");     // Options: Good, Poor
-        await selectRadioOption(driver, "Breathing", "Fast");   // Options: Fast, Difficult
-        await selectRadioOption(driver, "Chest Indrawing", "Absent"); // Options: Present, Absent
-        await fillTemperature(driver, 98.6); // Pass the desired temp as a number or string
+        await selectRadioOption(driver, "Activity", "Good");
+        await selectRadioOption(driver, "Sucking", "Good");
+        await selectRadioOption(driver, "Breathing", "Fast");
+        await selectRadioOption(driver, "Chest Indrawing", "Absent");
+        await fillTemperature(driver, 98.6);
         await driver.pause(1000);
-        await selectRadioOption(driver, "Jaundice", "No"); // Pass "Yes" or "No"
+        await selectRadioOption(driver, "Jaundice", "No");
         await fillUmbilicalStump(driver, "Falling Off");
         await driver.pause(1000);
         await selectRadioOption(driver, "Is Baby discharge from SNCU?", "No");
