@@ -1,4 +1,5 @@
 const { remote } = require('webdriverio');
+const { fillDeliveryOutcomeForm } = require("../../maternal_health/deliveryRegistration");
 
 // ─────────────────────────────────────────────────────────────
 //  APPIUM CONFIGURATION
@@ -21,9 +22,141 @@ const wdOpts = {
 };
 
 // ─────────────────────────────────────────────────────────────
-//  CORE HELPERS (Robust Dropdown & Coordinate Logic)
+//  NAVIGATION & SEARCH HELPERS
 // ─────────────────────────────────────────────────────────────
+async function clickMaternalHealth(driver) {
+    try {
+        console.log("⏳ Looking for 'Maternal Health' icon...");
+        const maternalHealthElement = await driver.$("//android.widget.TextView[@text='Maternal Health']");
+        await maternalHealthElement.waitForDisplayed({ timeout: 10000 });
+        await maternalHealthElement.click();
+        console.log("✅ Successfully clicked on 'Maternal Health'");
+    } catch (error) {
+        console.error("❌ Failed to click on 'Maternal Health':", error.message);
+        throw error;
+    }
+}
 
+async function clickDeliveryOutcome(driver) {
+    try {
+        console.log("⏳ Looking for 'Delivery Outcome' icon...");
+        const deliveryOutcomeElement = await driver.$("//android.widget.TextView[@text='Delivery Outcome']");
+        await deliveryOutcomeElement.waitForDisplayed({ timeout: 5000 });
+        await deliveryOutcomeElement.click();
+        console.log("✅ Successfully clicked on 'Delivery Outcome'");
+    } catch (error) {
+        console.error("❌ Failed to click on 'Delivery Outcome':", error.message);
+        throw error;
+    }
+}
+
+async function clickNewbornRegistration(driver) {
+    try {
+        console.log("⏳ Looking for 'Newborn Registration' icon...");
+        const newbornElement = await driver.$("//android.widget.TextView[@text='Newborn Registration']");
+        await newbornElement.waitForDisplayed({ timeout: 10000 });
+        await newbornElement.click();
+        console.log("✅ Successfully clicked on 'Newborn Registration'");
+    } catch (error) {
+        console.error("❌ Failed to click on 'Newborn Registration':", error.message);
+        throw error;
+    }
+}
+
+async function goToHome(driver) {
+    try {
+        console.log("⏳ Navigating back to Home...");
+        const homeBtn = await driver.$('//android.widget.Button[@content-desc="Go to Home" or @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/toolbar_menu_home"]');
+        if (await homeBtn.isExisting()) {
+            await homeBtn.click();
+            console.log("✅ Successfully navigated to Home via toolbar button");
+            return;
+        }
+        console.log("⚠️ Home toolbar button not found, falling back to system back press...");
+        for (let i = 0; i < 5; i++) {
+            await driver.back();
+            await driver.pause(800);
+        }
+    } catch (error) {
+        console.error("❌ Failed to navigate Home:", error.message);
+        throw error;
+    }
+}
+
+async function selectPinkRegisterAndSubmit(driver) {
+    try {
+        console.log("⏳ Looking for a beneficiary card with the pink REGISTER button...");
+        const nameXPath = '//android.widget.ImageView[@content-desc="SYNC STATE" and @clickable="true"]/ancestor::android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/cv_content"]//android.widget.TextView[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/tv_hh_id"]';
+
+        const nameElement = await driver.$(nameXPath);
+        await nameElement.waitForDisplayed({ timeout: 15000 });
+
+        const targetName = await nameElement.getText();
+        console.log(`✅ Found beneficiary with pink button state: "${targetName}"`);
+
+        console.log("⏳ Locating its REGISTER button...");
+        const registerButtonXPath = `//android.widget.TextView[@text="${targetName}" and @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/tv_hh_id"]/ancestor::android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/cv_content"][1]//android.widget.Button[@text="REGISTER"]`;
+
+        const registerButton = await driver.$(registerButtonXPath);
+        await registerButton.waitForDisplayed({ timeout: 5000 });
+        await registerButton.click();
+
+        console.log(`✅ Successfully clicked the pink 'REGISTER' button for "${targetName}"`);
+        return targetName;
+    } catch (error) {
+        console.error("❌ Failed to find or click the pink REGISTER button:", error.message);
+        throw error;
+    }
+}
+
+function extractSearchTerm(fullName) {
+    const trimmed = fullName.trim();
+    const babyMatch = trimmed.match(/of\s+(.+)$/i);
+    if (babyMatch) {
+        return babyMatch[1].trim();
+    }
+    return trimmed.split(/\s+/)[0];
+}
+
+async function searchAndRegisterNewbornByName(driver, searchTerm) {
+    try {
+        console.log(`⏳ Searching Newborn list for "${searchTerm}"...`);
+
+        const searchField = await driver.$('//android.widget.EditText[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/searchView"]');
+        await searchField.waitForDisplayed({ timeout: 10000 });
+        await searchField.click();
+
+        await searchField.clearValue();
+        await searchField.addValue(searchTerm);
+
+        console.log("⏳ Pressing Enter to execute search...");
+        await driver.pressKeyCode(66);
+
+        if (await driver.isKeyboardShown()) {
+            await driver.hideKeyboard();
+        }
+
+        await driver.pause(2000);
+        console.log(`✅ Successfully searched for "${searchTerm}"`);
+
+        console.log(`⏳ Locating REGISTER button for the searched newborn...`);
+        const registerBtnXPath = `//android.widget.Button[@text="REGISTER" and @resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_form_ec1"]`;
+
+        const registerButton = await driver.$(registerBtnXPath);
+        await registerButton.waitForDisplayed({ timeout: 5000 });
+        await registerButton.click();
+
+        console.log(`✅ Successfully clicked REGISTER for the newborn!`);
+
+    } catch (error) {
+        console.error(`❌ Failed to process search and register for "${searchTerm}":`, error.message);
+        throw error;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  DROPDOWN & COORDINATE LOGIC
+// ─────────────────────────────────────────────────────────────
 async function scrollSpinnerToMiddle(driver, spinnerSelector) {
     try {
         const spinner = await driver.$(spinnerSelector);
@@ -81,7 +214,6 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
     const size = await spinner.getSize();
     console.log(`📍 Spinner @ (${loc.x}, ${loc.y}), size (${size.width}x${size.height})`);
 
-    // Click the right side of the spinner to explicitly hit the dropdown arrow
     const tapX = Math.floor(loc.x + size.width - 40);
     const tapY = Math.floor(loc.y + size.height / 2);
 
@@ -89,7 +221,6 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
     await tapByCoords(driver, tapX, tapY);
     await driver.pause(2000);
 
-    // ─── STRATEGY 0: Direct XPath ───
     try {
         const item = await driver.$(`//*[@text="${value}"]`);
         await item.waitForDisplayed({ timeout: 4000 });
@@ -98,7 +229,6 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
         return;
     } catch (e) { console.log(`⚠️  XPath strategy failed: ${e.message}`); }
 
-    // ─── STRATEGY 1: UiSelector ───
     try {
         const item = await driver.$(`android=new UiSelector().text("${value}")`);
         await item.waitForDisplayed({ timeout: 3000 });
@@ -107,7 +237,6 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
         return;
     } catch (e) { console.log(`⚠️  UiSelector strategy failed: ${e.message}`); }
 
-    // ─── STRATEGY 2: Tag-by-tag XML parse ───
     try {
         const source = await driver.getPageSource();
         const nodes = source.match(/<[^>]+>/g) || [];
@@ -135,7 +264,6 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
         }
     } catch (e) { console.log(`⚠️  Tag parse failed: ${e.message}`); }
 
-    // ─── STRATEGY 3: Inline regex bounds ───
     try {
         const source = await driver.getPageSource();
         const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -152,7 +280,6 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
         }
     } catch (e) { console.log(`⚠️  Regex strategy failed: ${e.message}`); }
 
-    // ─── STRATEGY 4: Coordinate fallback ───
     const screen = await driver.getWindowRect();
     const idx = optionsList.indexOf(value);
     if (idx === -1) throw new Error(`"${value}" not in list: [${optionsList.join(', ')}]`);
@@ -179,53 +306,14 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
 // ─────────────────────────────────────────────────────────────
 //  FORM FIELD HELPERS
 // ─────────────────────────────────────────────────────────────
-
-async function clickNewbornRegistration(driver) {
-    try {
-        console.log("⏳ Looking for 'Newborn Registration' icon...");
-        const newbornRegElement = await driver.$("//android.widget.TextView[@text='Newborn Registration']");
-        await newbornRegElement.waitForDisplayed({ timeout: 5000 });
-        await newbornRegElement.click();
-        console.log("✅ Successfully clicked on 'Newborn Registration'");
-    } catch (error) {
-        console.error("❌ Failed to click on 'Newborn Registration':", error.message);
-        throw error;
-    }
-}
-
-async function scrollAndRegisterBaby(driver, targetName) {
-    try {
-        console.log(`⏳ Scrolling through the list to find '${targetName}'...`);
-        const androidScrollSelector = `new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("${targetName}")`;
-        const nameElement = await driver.$(`android=${androidScrollSelector}`);
-
-        await nameElement.waitForDisplayed({ timeout: 15000 });
-        console.log(`✅ Found '${targetName}' on the screen!`);
-
-        console.log(`⏳ Locating the specific REGISTER button for '${targetName}'...`);
-        const specificRegisterButtonXPath = `//android.view.ViewGroup[.//android.widget.TextView[@text="${targetName}"]]//android.widget.Button[@text="REGISTER"]`;
-
-        const registerButton = await driver.$(specificRegisterButtonXPath);
-        await registerButton.waitForDisplayed({ timeout: 5000 });
-        await registerButton.click();
-        console.log(`✅ Successfully clicked the 'REGISTER' button for '${targetName}'`);
-
-    } catch (error) {
-        console.error(`❌ Failed during Scroll and Register for '${targetName}':`, error.message);
-        throw error;
-    }
-}
-
 async function selectRadioOption(driver, questionText, answerText) {
     try {
         console.log(`⏳ Selecting '${answerText}' for '${questionText}'...`);
 
-        // Scroll the specific question into view
         const scrollable = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("${questionText}"))`;
         await driver.$(`android=${scrollable}`).catch(() => {});
         await driver.pause(1000);
 
-        // BULLETPROOF XPATH
         const radioButtonXPath = `//android.widget.TextView[contains(@text, "${questionText}")]/ancestor::android.widget.LinearLayout[.//android.widget.RadioGroup][1]//android.widget.RadioButton[@text="${answerText}"]`;
         const radioButton = await driver.$(radioButtonXPath);
 
@@ -233,7 +321,6 @@ async function selectRadioOption(driver, questionText, answerText) {
         await radioButton.click();
         await driver.pause(1500);
 
-        // Verification step
         const isChecked = await radioButton.getAttribute("checked");
         if (String(isChecked) !== "true") {
              console.log(`⚠️ Warning: '${answerText}' did not register as checked. Trying a fallback click...`);
@@ -271,7 +358,6 @@ async function selectDefectSeenAtBirth(driver, defectName) {
             defectName,
             optionsList
         );
-
     } catch (error) {
         console.error(`❌ Failed to select defect using master dropdown logic:`, error.message);
         throw error;
@@ -299,7 +385,6 @@ async function fillBirthWeight(driver, weightInGrams) {
 
         console.log(`✅ Successfully entered Birth Weight: ${weightInGrams}`);
         await driver.pause(1000);
-
     } catch (error) {
         console.error(`❌ Failed to enter Birth Weight:`, error.message);
         throw error;
@@ -344,6 +429,7 @@ async function addDischargeSummaries(driver) {
         throw error;
     }
 }
+
 async function fillOtherDefect(driver, defectDescription) {
     try {
         console.log(`⏳ Entering Other Defect: ${defectDescription}...`);
@@ -365,12 +451,12 @@ async function fillOtherDefect(driver, defectDescription) {
 
         console.log(`✅ Successfully entered Other Defect: ${defectDescription}`);
         await driver.pause(1000);
-
     } catch (error) {
         console.error(`❌ Failed to enter Other Defect:`, error.message);
         throw error;
     }
 }
+
 async function clickSubmitButton(driver) {
     try {
         console.log("⏳ Scrolling down to find the 'Submit' button...");
@@ -384,7 +470,6 @@ async function clickSubmitButton(driver) {
 
         console.log("✅ Successfully clicked the 'Submit' button!");
         await driver.pause(2000);
-
     } catch (error) {
         console.error(`❌ Failed to click the 'Submit' button:`, error.message);
         throw error;
@@ -394,19 +479,47 @@ async function clickSubmitButton(driver) {
 // ─────────────────────────────────────────────────────────────
 //  MAIN EXECUTION
 // ─────────────────────────────────────────────────────────────
-
 async function runTest() {
     let driver;
     try {
-        console.log("🚀 Starting Test Flow...");
         driver = await remote(wdOpts);
+        console.log("🚀 Starting Test Flow...");
+
+        // 1. Maternal Health -> Delivery Outcome
+        await clickMaternalHealth(driver);
+        await driver.pause(2000);
+
+        await clickDeliveryOutcome(driver);
+        await driver.pause(3000);
+
+        // 2. Select the beneficiary with the pink register button, click it, remember name
+        const registeredName = await selectPinkRegisterAndSubmit(driver);
+        await driver.pause(3000);
+
+        // 3. Fill and submit the Delivery Outcome form
+        await fillDeliveryOutcomeForm(driver);
+        console.log("🎉 Delivery Outcome registration completed!");
+        await driver.pause(2000);
+
+        // 4. Go back to Home
+        await goToHome(driver);
+        await driver.pause(2000);
+
+        // 5. Maternal Health -> Newborn Registration
+        await clickMaternalHealth(driver);
+        await driver.pause(2000);
 
         await clickNewbornRegistration(driver);
         await driver.pause(3000);
 
-        await scrollAndRegisterBaby(driver, "1st baby of SWEETY");
+        // 6. Search for the remembered name
+        const searchTerm = extractSearchTerm(registeredName);
+        await searchAndRegisterNewbornByName(driver, searchTerm);
+        await driver.pause(3000);
 
-        // Form inputs
+        // 7. NEWBORN REGISTRATION FORM FILL
+        console.log("📝 Starting Newborn Registration Form Fill...");
+
         await selectRadioOption(driver, "Was Corticosteroid Inj", "Yes");
         await selectRadioOption(driver, "Sex of Infant", "Female");
 
@@ -420,10 +533,11 @@ async function runTest() {
         // Trigger Defect Dropdown Logic
         await selectRadioOption(driver, "Any birth defect seen", "Yes");
         await driver.pause(2000);
+
         const defectName = "Other";
         await selectDefectSeenAtBirth(driver, defectName);
 
-        // New conditional logic for "Other"
+        // Conditional logic for "Other" defect
         if (defectName === "Other") {
             await fillOtherDefect(driver, "Observed minor rash on left arm");
         }

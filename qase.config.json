@@ -1,0 +1,12 @@
+{
+  "debug": true,
+  "testops": {
+    "api": {
+      "token": "b86dc2704a7a090acc839f7fbb62f184298d7a8b95a1399f2fc15921099edd45"
+    },
+    "project": "AR",
+    "run": {
+      "complete": true
+    }
+  }
+}

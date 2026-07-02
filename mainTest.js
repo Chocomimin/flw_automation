@@ -38,7 +38,7 @@ async function main() {
     const myPreferredLanguage = "English"; // Change this to test other languages
     await selectLanguage(driver, myPreferredLanguage);
    
-    await login(driver, "Anima", "Test@123");
+    await login(driver, "Bobita", "Test@123");
     await driver.pause(5000);
 
    
@@ -48,7 +48,7 @@ async function main() {
       throw new Error("selectVillage is not available from steps/villageSteps");
     }
 
-    await selectVillage(driver, "Borjan TE");
+    await selectVillage(driver, "Oating");
     await driver.pause(1000);
    
     await clickAllHousehold(driver);

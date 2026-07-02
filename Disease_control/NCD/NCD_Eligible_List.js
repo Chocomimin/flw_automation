@@ -672,4 +672,7 @@ async function main() {
     }
 }
 
-main();
+// At the bottom of NCD_Eligible_List.js and Routine_Immunization.js
+module.exports = {
+    fillCbacForm: main // or whatever you rename the main function to
+};

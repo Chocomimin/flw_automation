@@ -1,24 +1,9 @@
-const { remote } = require('webdriverio');
-
-const capabilities = {
-    platformName: 'Android',
-    'appium:automationName': 'UiAutomator2',
-    'appium:deviceName': 'emulator-5554',
-    'appium:appPackage': 'org.piramalswasthya.sakhi.saksham.uat',
-    'appium:appActivity': '.ui.login.LoginActivity',
-    'appium:noReset': true
-};
-
-const wdioOptions = {
-    hostname: '127.0.0.1',
-    port: 4723,
-    path: '/',
-    capabilities: capabilities,
-    logLevel: 'error'
-};
+const { remote } = require("webdriverio");
+const { selectLanguage, login } = require("../steps/loginSteps"); // Adjust to '../steps/loginSteps' if needed based on directory structure
+const { selectVillage } = require("../steps/villageSteps");
 
 // ─────────────────────────────────────────────────────────────
-//  1. Click All Beneficiaries
+//  ABHA HELPER FUNCTIONS
 // ─────────────────────────────────────────────────────────────
 
 async function clickAllBeneficiaries(driver) {
@@ -29,9 +14,41 @@ async function clickAllBeneficiaries(driver) {
     console.log("✅ Successfully clicked All Beneficiaries");
 }
 
-// ─────────────────────────────────────────────────────────────
-//  2. Scroll and Click ABHA button for a beneficiary
-// ─────────────────────────────────────────────────────────────
+// New function to handle searching via the search bar instead of scrolling
+async function searchAndClickAbha(driver, searchText, fullName) {
+    console.log(`🔍 Typing '${searchText}' in the search bar...`);
+
+    // Target the search bar using its resource-id from the XML
+    const searchInput = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/searchView")');
+    await searchInput.waitForDisplayed({ timeout: 5000 });
+    await searchInput.click();
+    await searchInput.setValue(searchText);
+
+    // Hide keyboard if it pops up so it doesn't block the screen
+    if (await driver.isKeyboardShown()) {
+        await driver.hideKeyboard();
+        await driver.pause(800);
+    }
+
+    await driver.pause(2000); // Give the app a moment to filter the list
+
+    const exactNameInApp = fullName.toUpperCase();
+    console.log(`🔍 Verifying and looking for full name match: ${exactNameInApp}...`);
+
+    try {
+        // Find the ABHA button tied specifically to the full name provided
+        const abhaButtonXPath = `//android.widget.TextView[@text="${exactNameInApp}"]/ancestor::android.view.ViewGroup[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/contentLayout"]//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_abha"]`;
+        const abhaButton = await driver.$(abhaButtonXPath);
+
+        await abhaButton.waitForDisplayed({ timeout: 10000 });
+        console.log(`👆 Clicking ABHA button for ${exactNameInApp}...`);
+        await abhaButton.click();
+        console.log(`✅ Successfully clicked ABHA for ${exactNameInApp}`);
+    } catch (error) {
+        console.error(`❌ Could not find ${exactNameInApp} after searching for '${searchText}'.`);
+        throw new Error(`Beneficiary ${exactNameInApp} not found in the filtered list.`);
+    }
+}
 
 async function scrollAndClickAbha(driver, nameToSearch) {
     const exactNameInApp = nameToSearch.toUpperCase();
@@ -57,11 +74,6 @@ async function scrollAndClickAbha(driver, nameToSearch) {
     await abhaButton.click();
     console.log(`✅ Successfully clicked ABHA for ${exactNameInApp}`);
 }
-
-// ─────────────────────────────────────────────────────────────
-//  3. Mark all consent checkboxes and click I Agree
-//     (Used on AbhaConsentFragment screen)
-// ─────────────────────────────────────────────────────────────
 
 async function markAllAndAgree(driver) {
     console.log("📝 Handling ABHA Consent screen (AbhaConsentFragment)...");
@@ -161,11 +173,6 @@ async function markAllAndAgree(driver) {
     console.log("🎉 Clicked 'I Agree' successfully!");
     await driver.pause(2000);
 }
-
-// ─────────────────────────────────────────────────────────────
-//  4. Create ABHA — enter Aadhaar, mobile, handle consent
-//     screen, then send OTP
-// ─────────────────────────────────────────────────────────────
 
 async function createAbha(driver, aadhaarNumber, mobileNumber) {
     console.log("📝 Starting ABHA Creation process...");
@@ -308,15 +315,9 @@ async function createAbha(driver, aadhaarNumber, mobileNumber) {
     console.log("✅ Clicked Send OTP");
 }
 
-// ─────────────────────────────────────────────────────────────
-//  5. Wait for manual OTP entry, then click Verify OTP
-//     waitSeconds = 180  →  3 minutes
-// ─────────────────────────────────────────────────────────────
-
 async function waitForManualOtpAndVerify(driver, otpName = "OTP", waitSeconds = 180) {
     console.log(`⏳ [${otpName}] You have ${waitSeconds / 60} minute(s) to enter the OTP on the device...`);
 
-    // Poll every 5 seconds — clicks Verify OTP the moment it becomes enabled
     const pollInterval = 5000;
     const maxPolls = Math.floor((waitSeconds * 1000) / pollInterval);
 
@@ -347,7 +348,6 @@ async function waitForManualOtpAndVerify(driver, otpName = "OTP", waitSeconds = 
         }
     }
 
-    // Final attempt after full wait period
     console.log(`⏳ [${otpName}] Wait complete — final attempt to verify...`);
     try {
         await verifyOtpBtn.waitForDisplayed({ timeout: 5000 });
@@ -370,10 +370,6 @@ async function waitForManualOtpAndVerify(driver, otpName = "OTP", waitSeconds = 
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  6. Decline ABHA download
-// ─────────────────────────────────────────────────────────────
-
 async function declineAbhaDownload(driver) {
     console.log("📝 Checking for ABHA download prompt...");
     const noButton = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_download_abha_no")');
@@ -389,49 +385,86 @@ async function declineAbhaDownload(driver) {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  MAIN
+//  MAIN EXECUTION ROUTINE
 // ─────────────────────────────────────────────────────────────
 
 async function main() {
-    console.log("🚀 Starting Appium session...");
-    const driver = await remote(wdioOptions);
+    const driver = await remote({
+        protocol: "http",
+        hostname: "localhost",
+        port: 4723,
+        path: "/",
+        capabilities: {
+            platformName: "Android",
+            "appium:deviceName": "ZD222X4TDK",
+            "appium:automationName": "UiAutomator2",
+            "appium:appPackage": "org.piramalswasthya.sakhi.saksham.uat",
+            "appium:appActivity": "org.piramalswasthya.sakhi.ui.login_activity.LoginActivity",
+            "appium:noReset": false,
+            "appium:autoGrantPermissions": true,
+            "appium:newCommandTimeout": 300,
+            "appium:language": "en",
+            "appium:locale": "US",
+        }
+    });
+
+    console.log("✅ App launched successfully!");
 
     try {
-        await driver.pause(3000);
+        // --- 1. APP LOGIN & SETUP ---
+        const myPreferredLanguage = "English";
+        await selectLanguage(driver, myPreferredLanguage);
 
-        // Step 1: Navigate to beneficiary list
+        await login(driver, "Bobita", "Test@123");
+        await driver.pause(5000);
+
+        if (typeof selectVillage !== "function") {
+            throw new Error("selectVillage is not available from steps/villageSteps");
+        }
+
+        await selectVillage(driver, "Oating");
+        await driver.pause(2000);
+
         await clickAllBeneficiaries(driver);
         await driver.pause(2000);
 
-        // Step 2: Find beneficiary and click ABHA
-        await scrollAndClickAbha(driver, "Ananya Verma");
+        // --- 2. SEARCH & CLICK ABHA ---
+        // Using the newly requested search logic instead of scrolling
+        await searchAndClickAbha(driver, "Kamna", "KAMNA SINGH");
         await driver.pause(2000);
 
-        await createAbha(driver, "264396640972", "9014984113");
+        // --- 3. CREATE ABHA ---
+        await createAbha(driver, "000000000000" /* [Aadhaar Redacted] */, "9014984113");
 
-        // Step 4: Wait up to 3 minutes for Aadhaar OTP
         await waitForManualOtpAndVerify(driver, "Aadhaar OTP", 180);
         await driver.pause(3000);
 
-        // Step 5: Wait up to 3 minutes for Mobile OTP
         await waitForManualOtpAndVerify(driver, "Mobile OTP", 180);
         await driver.pause(3000);
 
-        // Step 6: Decline ABHA card download
+        // Decline ABHA card download
         await declineAbhaDownload(driver);
 
         console.log("🎊 ABHA Creation flow completed successfully!");
 
     } catch (error) {
-        console.error("❌ Test Failed:", error.message);
-        console.error(error.stack);
-    } finally {
-        if (driver) {
-            console.log("🛑 Closing Appium session...");
-            await driver.pause(2000);
-            await driver.deleteSession();
+        console.error("❌ Test failed:", error);
+
+        try {
+            const screenshot = await driver.takeScreenshot();
+            const fs = require('fs');
+            fs.writeFileSync(`error-${Date.now()}.png`, screenshot, 'base64');
+            console.log("📸 Screenshot saved for debugging");
+        } catch (screenshotError) {
+            console.error("Could not take screenshot:", screenshotError);
         }
+    } finally {
+        console.log('🧹 Closing active sessions...');
+        await driver.pause(5000);
+        await driver.deleteSession();
     }
 }
 
-main();
+main().catch(err => {
+    console.error("❌ Main function failed:", err);
+});

@@ -1,47 +1,25 @@
 // householdFormSteps.js
-// ✅ FINAL VERSION — All dropdowns use dedicated inline spinner logic with XML + coordinate fallback
-// Works on ALL devices — no coordinates, no window switching needed
+// ✅ Dropdowns use the same openSpinnerAndSelect approach as ancVisitForm.js
+// Spinners are located by content-desc (confirmed from UI XML dumps)
 
 // ─────────────────────────────────────────────────────────────
-//  CORE HELPER — Scroll spinner into view
+//  DROPDOWN OPTIONS — single source of truth for each spinner
 // ─────────────────────────────────────────────────────────────
 
-async function scrollSpinnerToMiddle(driver, spinnerSelector) {
-    try {
-        const spinner = await driver.$(spinnerSelector);
-        const loc = await spinner.getLocation();
-        const screen = await driver.getWindowRect();
-        const midY = screen.height / 2;
+const DROPDOWN_OPTIONS = {
+    typeOfHouse:     ['None', 'Kuchha', 'Pucca', 'Other'],
+    typeOfFuel:      ['Firewood', 'Crop Residue', 'Cow dung cake', 'Coal', 'Kerosene', 'LPG', 'Induction', 'Other'],
+    waterSource:     ['Tap Water', 'Hand pump inside house', 'Hand pump outside of house', 'Well', 'Tank', 'River', 'Pond', 'Other'],
+    electricity:     ['Electricity Supply', 'Generator', 'Solar Power', 'Kerosene Lamp', 'Other'],
+    toilet:          ['Flush toilet with running water', 'Flush toilet without water', 'Pit toilet with running water supply', 'Pit toilet without water supply', 'Other', 'None'],
+};
 
-        // If the element is in the bottom half of the screen, pull it up
-        if (loc.y > midY + 100) {
-            console.log(`⬆️  Spinner at y=${loc.y}, scrolling toward middle...`);
-
-            // Use W3C pointer actions for a reliable, device-agnostic swipe
-            const startY = Math.floor(screen.height * 0.7);
-            const endY = Math.floor(screen.height * 0.3);
-            const swipeX = Math.floor(screen.width / 2);
-
-            await driver.performActions([{
-                type: 'pointer', id: 'finger1',
-                parameters: { pointerType: 'touch' },
-                actions: [
-                    { type: 'pointerMove', duration: 0, x: swipeX, y: startY },
-                    { type: 'pointerDown', button: 0 },
-                    { type: 'pause', duration: 200 },
-                    { type: 'pointerMove', duration: 1000, x: swipeX, y: endY }, // swipe up
-                    { type: 'pointerUp', button: 0 }
-                ]
-            }]);
-            await driver.releaseActions();
-            await driver.pause(1500); // Allow UI to settle
-        }
-    } catch (e) {
-        console.log('⚠️  scrollSpinnerToMiddle skipped:', e.message);
-    }
+function randomPick(list) {
+    return list[Math.floor(Math.random() * list.length)];
 }
+
 // ─────────────────────────────────────────────────────────────
-//  CORE HELPER — Tap by coordinates
+//  LOW-LEVEL HELPERS
 // ─────────────────────────────────────────────────────────────
 
 async function tapByCoords(driver, tapX, tapY) {
@@ -49,7 +27,7 @@ async function tapByCoords(driver, tapX, tapY) {
         type: 'pointer', id: 'finger1',
         parameters: { pointerType: 'touch' },
         actions: [
-            { type: 'pointerMove', duration: 0, x: tapX, y: tapY },
+            { type: 'pointerMove', duration: 0,   x: tapX, y: tapY },
             { type: 'pointerDown', button: 0 },
             { type: 'pause',       duration: 150 },
             { type: 'pointerUp',   button: 0 }
@@ -59,122 +37,166 @@ async function tapByCoords(driver, tapX, tapY) {
     await driver.pause(500);
 }
 
+async function hideKeyboardSafe(driver) {
+    try {
+        let isShown = await driver.isKeyboardShown();
+        if (isShown) {
+            await driver.hideKeyboard();
+            await driver.pause(500);
+
+            isShown = await driver.isKeyboardShown();
+            if (isShown) {
+                console.log('⚠️ Keyboard still shown, forcing native BACK button...');
+                await driver.pressKeyCode(4);
+                await driver.pause(500);
+            }
+        }
+    } catch (e) {
+        try {
+            await driver.pressKeyCode(4);
+            await driver.pause(500);
+        } catch (err) {
+            console.log(`⚠️ Could not hide keyboard: ${err.message}`);
+        }
+    }
+}
+
 // ─────────────────────────────────────────────────────────────
-//  CORE HELPER — Shared spinner click + XML bounds tap
-//  Used by ALL dropdowns — single consistent strategy everywhere
+//  CORE SPINNER SELECTOR
+//  Identical strategy to ancVisitForm.js openSpinnerAndSelect:
+//    • Scrolls the spinner into view by content-desc
+//    • Taps the right-side arrow (avoids the unclickable text area)
+//    • Detects keyboard pop-up and re-taps if needed
+//    • Falls through: CheckedTextView XPath → UiSelector → generic XPath
+//      → page-source bounds → coordinate fallback
 // ─────────────────────────────────────────────────────────────
 
-async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optionsList) {
-    // 1. Force the spinner to the safe middle zone of the screen BEFORE clicking
-    await scrollSpinnerToMiddle(driver, spinnerSelector);
+async function openSpinnerAndSelect(driver, spinnerContentDesc, optionsList, value) {
+    const idx = optionsList.indexOf(value);
+    if (idx === -1) {
+        throw new Error(`"${value}" not found in options: [${optionsList.join(', ')}]`);
+    }
 
-    const spinner = await driver.$(spinnerSelector);
+    // Scroll spinner into view
+    try {
+        await driver.$(`android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().descriptionContains("${spinnerContentDesc}"))`);
+        await driver.pause(500);
+    } catch (e) {
+        console.log(`⚠️  scrollIntoView skipped for "${spinnerContentDesc}": ${e.message}`);
+    }
+
+    const spinnerXPath = `//android.widget.Spinner[@content-desc="${spinnerContentDesc}"]`;
+    const spinner = await driver.$(spinnerXPath);
     await spinner.waitForDisplayed({ timeout: 10000 });
 
     const loc  = await spinner.getLocation();
     const size = await spinner.getSize();
-    console.log(`📍 Spinner @ (${loc.x}, ${loc.y}), size (${size.width}x${size.height})`);
+    console.log(`📍 Spinner "${spinnerContentDesc}" @ (${loc.x}, ${loc.y}), size (${size.width}x${size.height})`);
 
-    // 2. Click the RIGHT side of the spinner to explicitly hit the dropdown arrow
-    // This bypasses the flaky generic `.click()` which often hits the unclickable text area
-    const tapX = Math.floor(loc.x + size.width - 40); // 40px inwards from the right edge
+    // Tap the right-side arrow icon of the spinner
+    const tapX = Math.floor(loc.x + size.width - 40);
     const tapY = Math.floor(loc.y + size.height / 2);
-
     console.log(`📍 Tapping dropdown arrow at (${tapX}, ${tapY})`);
     await tapByCoords(driver, tapX, tapY);
-    await driver.pause(2000); // Wait for popup to fully expand
+    await driver.pause(1000);
 
-    // ─── STRATEGY 0: Direct XPath (Often the most robust for Android Popups) ───
+    // If keyboard appeared, close it and re-tap
     try {
-        const item = await driver.$(`//*[@text="${value}"]`);
+        if (await driver.isKeyboardShown()) {
+            console.log('⚠️ Keyboard opened after clicking dropdown! Closing it...');
+            await driver.hideKeyboard();
+            await driver.pause(1000);
+            console.log('🔄 Clicking dropdown again...');
+            await tapByCoords(driver, tapX, tapY);
+            await driver.pause(1500);
+        }
+    } catch (e) {}
+
+    // Strategy 1: CheckedTextView XPath
+    try {
+        const item = await driver.$(`//android.widget.CheckedTextView[@text="${value}"]`);
         await item.waitForDisplayed({ timeout: 4000 });
         await item.click();
-        console.log(`✅ Selected "${value}" via XPath`);
+        console.log(`✅ Selected "${value}" via CheckedTextView XPath`);
         return;
     } catch (e) {
-        console.log(`⚠️  XPath strategy failed: ${e.message}`);
+        console.log(`⚠️  CheckedTextView XPath failed: ${e.message}`);
     }
 
-    // ─── STRATEGY 1: UiSelector ───
+    // Strategy 2: UiSelector CheckedTextView
     try {
-        const item = await driver.$(`android=new UiSelector().text("${value}")`);
+        const item = await driver.$(`android=new UiSelector().className("android.widget.CheckedTextView").text("${value}")`);
         await item.waitForDisplayed({ timeout: 3000 });
         await item.click();
-        console.log(`✅ Selected "${value}" via UiSelector`);
+        console.log(`✅ Selected "${value}" via UiSelector CheckedTextView`);
         return;
     } catch (e) {
-        console.log(`⚠️  UiSelector strategy failed: ${e.message}`);
+        console.log(`⚠️  UiSelector CheckedTextView failed: ${e.message}`);
     }
 
-    // ─── STRATEGY 2: Tag-by-tag XML parse (most reliable fallback) ───
+    // Strategy 3: Generic XPath by text
     try {
-        const source = await driver.getPageSource();
-        const nodes = source.match(/<[^>]+>/g) || [];
-        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const textRegex = new RegExp(`(?:text|content-desc)="\\s*${escapedValue}\\s*"`);
-        let foundNode = null;
-
-        for (const node of nodes) {
-            if (textRegex.test(node) && node.includes('bounds=')) {
-                foundNode = node;
-                break;
-            }
-        }
-
-        if (foundNode) {
-            const boundsMatch = foundNode.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-            if (boundsMatch) {
-                const tapX = Math.floor((parseInt(boundsMatch[1]) + parseInt(boundsMatch[3])) / 2);
-                const tapY = Math.floor((parseInt(boundsMatch[2]) + parseInt(boundsMatch[4])) / 2);
-                console.log(`📍 Found "${value}" in XML (tag parse) → tap(${tapX},${tapY})`);
-                await tapByCoords(driver, tapX, tapY);
-                console.log(`✅ Selected "${value}" via tag parse`);
-                return;
-            }
-        }
-        console.log(`⚠️  "${value}" not found via tag parse, trying regex strategy...`);
+        const item = await driver.$(`//*[@text="${value}"]`);
+        await item.waitForDisplayed({ timeout: 3000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via generic XPath`);
+        return;
     } catch (e) {
-        console.log(`⚠️  Tag parse failed: ${e.message}`);
+        console.log(`⚠️  Generic XPath failed: ${e.message}`);
     }
 
-    // ─── STRATEGY 3: Inline regex bounds ───
+    // Strategy 4: Page-source bounds
     try {
         const source = await driver.getPageSource();
         const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`text="${escapedValue}"[^/]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`);
-        const match = source.match(regex);
 
+        const checkedPattern = new RegExp(
+            `class="android\\.widget\\.CheckedTextView"[^>]*?text="${escapedValue}"[^>]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`,
+            's'
+        );
+        const genericPattern = new RegExp(
+            `text="${escapedValue}"[^>]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`
+        );
+
+        const match = source.match(checkedPattern) || source.match(genericPattern);
         if (match) {
-            const tapX = Math.floor((parseInt(match[1]) + parseInt(match[3])) / 2);
-            const tapY = Math.floor((parseInt(match[2]) + parseInt(match[4])) / 2);
-            console.log(`📍 Found "${value}" via regex → tap(${tapX},${tapY})`);
-            await tapByCoords(driver, tapX, tapY);
-            console.log(`✅ Selected "${value}" via regex`);
+            const bx = Math.floor((parseInt(match[1]) + parseInt(match[3])) / 2);
+            const by = Math.floor((parseInt(match[2]) + parseInt(match[4])) / 2);
+            console.log(`📍 Found "${value}" in page source → tap(${bx}, ${by})`);
+            await tapByCoords(driver, bx, by);
+            console.log(`✅ Selected "${value}" via page source bounds`);
             return;
         }
-        console.log(`⚠️  "${value}" not found via regex, trying coordinate fallback...`);
+        console.log(`⚠️  "${value}" not found in page source`);
     } catch (e) {
-        console.log(`⚠️  Regex strategy failed: ${e.message}`);
+        console.log(`⚠️  Page source strategy failed: ${e.message}`);
     }
 
-    // ─── STRATEGY 4: Coordinate fallback ───
-    const screen = await driver.getWindowRect();
-    const idx = optionsList.indexOf(value);
-    if (idx === -1) throw new Error(`"${value}" not in list: [${optionsList.join(', ')}]`);
+    // Strategy 5: Coordinate fallback
+    const freshLoc  = await spinner.getLocation();
+    const freshSize = await spinner.getSize();
+    let screenHeight = 2400;
+    let screenWidth  = 1080;
+    try {
+        const screen = await driver.getWindowRect();
+        screenHeight = screen.height;
+        screenWidth  = screen.width;
+    } catch (e) {}
 
-    const rowHeight     = size.height;
-    const spinnerBottom = loc.y + size.height;
-    const opensUpward   = (screen.height - spinnerBottom) < (optionsList.length * rowHeight);
-    const finalTapX     = Math.floor(loc.x + size.width / 2);
+    const rowHeight     = freshSize.height;
+    const spinnerBottom = freshLoc.y + freshSize.height;
+    const spaceBelow    = screenHeight - spinnerBottom;
+    const opensUpward   = spaceBelow < (optionsList.length * rowHeight);
+    const finalTapX     = Math.floor(freshLoc.x + freshSize.width / 2);
     let   finalTapY;
 
     if (opensUpward) {
-        const reversedIdx = (optionsList.length - 1) - idx;
-        finalTapY = Math.floor(loc.y - (reversedIdx * rowHeight) - (rowHeight / 2));
+        const popupTop = freshLoc.y - (optionsList.length * rowHeight);
+        finalTapY = Math.floor(popupTop + (idx * rowHeight) + rowHeight / 2);
     } else {
-        finalTapY = Math.floor(spinnerBottom + (idx * rowHeight) + (rowHeight / 2));
+        finalTapY = Math.floor(spinnerBottom + (idx * rowHeight) + rowHeight / 2);
     }
-    finalTapY = Math.max(5, Math.min(finalTapY, screen.height - 5));
+    finalTapY = Math.max(5, Math.min(finalTapY, screenHeight - 5));
 
     console.log(`📍 Coordinate fallback → tap(${finalTapX}, ${finalTapY})`);
     await tapByCoords(driver, finalTapX, finalTapY);
@@ -191,10 +213,7 @@ async function fillFirstName(driver, firstName) {
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
     await f.setValue(firstName);
-    if (await driver.isKeyboardShown()) {
-        await driver.hideKeyboard();
-        await driver.pause(500);
-    }
+    await hideKeyboardSafe(driver);
     console.log('✅ First Name entered successfully');
 }
 
@@ -204,10 +223,7 @@ async function fillLastName(driver, lastName) {
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
     await f.setValue(lastName);
-    if (await driver.isKeyboardShown()) {
-        await driver.hideKeyboard();
-        await driver.pause(500);
-    }
+    await hideKeyboardSafe(driver);
     console.log('✅ Last Name entered successfully');
 }
 
@@ -217,10 +233,7 @@ async function fillMobileNumber(driver, mobileNumber) {
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
     await f.setValue(mobileNumber);
-    if (await driver.isKeyboardShown()) {
-        await driver.hideKeyboard();
-        await driver.pause(500);
-    }
+    await hideKeyboardSafe(driver);
     console.log('✅ Mobile Number entered successfully');
 }
 
@@ -230,10 +243,7 @@ async function fillHouseNo(driver, houseNo) {
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
     await f.setValue(houseNo);
-    if (await driver.isKeyboardShown()) {
-        await driver.hideKeyboard();
-        await driver.pause(500);
-    }
+    await hideKeyboardSafe(driver);
     console.log('✅ House Number entered successfully');
 }
 
@@ -243,10 +253,7 @@ async function fillWardNo(driver, wardNo) {
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
     await f.setValue(wardNo);
-    if (await driver.isKeyboardShown()) {
-        await driver.hideKeyboard();
-        await driver.pause(500);
-    }
+    await hideKeyboardSafe(driver);
     console.log('✅ Ward Number entered successfully');
 }
 
@@ -256,10 +263,7 @@ async function fillWardName(driver, wardName) {
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
     await f.setValue(wardName);
-    if (await driver.isKeyboardShown()) {
-        await driver.hideKeyboard();
-        await driver.pause(500);
-    }
+    await hideKeyboardSafe(driver);
     console.log('✅ Ward Name entered successfully');
 }
 
@@ -269,13 +273,9 @@ async function fillMohallaName(driver, mohallaName) {
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
     await f.setValue(mohallaName);
-    if (await driver.isKeyboardShown()) {
-        await driver.hideKeyboard();
-        await driver.pause(800); // longer pause — next scroll needs keyboard fully gone
-    }
+    await hideKeyboardSafe(driver);
     console.log('✅ Mohalla Name entered successfully');
 }
-
 
 // ─────────────────────────────────────────────────────────────
 //  RADIO BUTTON HELPERS
@@ -312,90 +312,93 @@ async function selectSeparateKitchen(driver, value) {
     console.log(`✅ Separate Kitchen selected: ${value}`);
 }
 
-
 // ─────────────────────────────────────────────────────────────
 //  DROPDOWN HELPERS
+//  All spinners now use openSpinnerAndSelect with content-desc
+//  (confirmed from UI XML dumps: ui_dump_all.xml, ui_dump_all_electrcity.xml,
+//   ui_dump_all_fuel.xml, ui_dump_all_source.xml)
 // ─────────────────────────────────────────────────────────────
 
 async function selectTypeOfHouse(driver, value) {
-    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Type of house"))');
-    await driver.pause(1000);
-    await clickSpinnerAndSelectOption(
-        driver,
-        'android=new UiSelector().className("android.widget.Spinner").textContains("Type of house")',
-        value,
-        ['None', 'Kuchha', 'Pucca', 'Other']
-    );
+    console.log('Processing Type of House Dropdown...');
+    await openSpinnerAndSelect(driver, 'Type of house',
+        ['None', 'Kuchha', 'Pucca', 'Other'],
+        value);
     console.log(`✅ Type of House: ${value}`);
 }
 
 async function selectTypeOfFuel(driver, value) {
-    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Type of fuel"))');
-    await driver.pause(1000);
-    await clickSpinnerAndSelectOption(
-        driver,
-        'android=new UiSelector().className("android.widget.Spinner").textContains("Type of fuel")',
-        value,
-        ['Firewood', 'Crop Residue', 'Cow dung cake', 'Coal', 'Kerosene', 'LPG', 'Induction', 'Other']
-    );
+    console.log('Processing Type of Fuel Dropdown...');
+    await openSpinnerAndSelect(driver, 'Type of fuel used for Cooking', DROPDOWN_OPTIONS.typeOfFuel, value);
     console.log(`✅ Type of Fuel: ${value}`);
+
+    if (value === 'Other') {
+        try {
+            await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Other Type of fuel"))');
+            await driver.pause(500);
+        } catch (e) {}
+
+        const otherField = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/et").textContains("Other Type of fuel")');
+        await otherField.waitForDisplayed({ timeout: 10000 });
+        await otherField.click();
+        await otherField.setValue('Biogas'); // Replace with your desired test value
+        await hideKeyboardSafe(driver);
+    }
 }
 
 async function selectPrimaryWaterSource(driver, value) {
-    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Primary Source"))');
-    await driver.pause(1000);
-    await clickSpinnerAndSelectOption(
-        driver,
-        'android=new UiSelector().className("android.widget.Spinner").textContains("Primary Source")',
-        value,
-        ['Tap Water', 'Hand pump inside house', 'Hand pump outside of house', 'Well', 'Tank', 'River', 'Pond', 'Other']
-    );
+    console.log('Processing Primary Source of Water Dropdown...');
+    await openSpinnerAndSelect(driver, 'Primary Source of Water', DROPDOWN_OPTIONS.waterSource, value);
     console.log(`✅ Primary Water Source: ${value}`);
+
+    if (value === 'Other') {
+        // Because text is "null", we rely on the specific layout ID and its child EditText
+        const xpath = '//android.widget.LinearLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/til_edit_text"]//android.widget.EditText';
+        const otherField = await driver.$(xpath);
+
+        await otherField.waitForDisplayed({ timeout: 10000 });
+        await otherField.click();
+        await otherField.setValue('Spring Water'); // Replace with your desired test value
+        await hideKeyboardSafe(driver);
+    }
 }
 
 async function selectElectricityAvailability(driver, value) {
-    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Availability of Electricity"))');
-    await driver.pause(1000);
-    await clickSpinnerAndSelectOption(
-        driver,
-        'android=new UiSelector().className("android.widget.Spinner").textContains("Availability of Electricity")',
-        value,
-        ['Electricity Supply', 'Generator', 'Solar Power', 'Kerosene Lamp', 'Other']
-    );
+    console.log('Processing Availability of Electricity Dropdown...');
+    await openSpinnerAndSelect(driver, 'Availability of Electricity', DROPDOWN_OPTIONS.electricity, value);
     console.log(`✅ Electricity: ${value}`);
 
     if (value === 'Other') {
-        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Other availability"))');
+        try {
+            await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Other availability"))');
+            await driver.pause(500);
+        } catch (e) {}
         const otherField = await driver.$('android=new UiSelector().textContains("Other availability")');
         await otherField.waitForDisplayed({ timeout: 10000 });
         await otherField.click();
         await otherField.setValue('Temporary electricity connection');
-        if (await driver.isKeyboardShown()) {
-            await driver.hideKeyboard();
-            await driver.pause(500);
-        }
+        await hideKeyboardSafe(driver);
     }
 }
 
 async function selectToiletAvailability(driver, value) {
-    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Availability of Toilet"))');
-    await driver.pause(1000);
-    await clickSpinnerAndSelectOption(
-        driver,
-        'android=new UiSelector().className("android.widget.Spinner").textContains("Availability of Toilet")',
-        value,
-        [
-            'Flush toilet with running water',
-            'Flush toilet without water',
-            'Pit toilet with running water supply',
-            'Pit toilet without water supply',
-            'Other',
-            'None'
-        ]
-    );
+    console.log('Processing Availability of Toilet Dropdown...');
+    await openSpinnerAndSelect(driver, 'Availability of Toilet', DROPDOWN_OPTIONS.toilet, value);
     console.log(`✅ Toilet: ${value}`);
-}
 
+    if (value === 'Other') {
+        try {
+            await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Other Availability of Toilet"))');
+            await driver.pause(500);
+        } catch (e) {}
+
+        const otherField = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/et").textContains("Other Availability of Toilet")');
+        await otherField.waitForDisplayed({ timeout: 10000 });
+        await otherField.click();
+        await otherField.setValue('Community Toilet'); // Replace with your desired test value
+        await hideKeyboardSafe(driver);
+    }
+}
 
 // ─────────────────────────────────────────────────────────────
 //  MASTER FUNCTION
@@ -404,14 +407,14 @@ async function selectToiletAvailability(driver, value) {
 async function fillHouseholdFormWithExamples(driver, data = {}) {
     console.log('📝 Filling household form...');
 
-    await fillFirstName(driver, data.firstName || 'mina');
-    await fillLastName(driver, data.lastName || 'Verma');
-    await fillMobileNumber(driver, data.mobileNumber || '9876543210');
+    await fillFirstName(driver, data.firstName || 'rina');
+    await fillLastName(driver, data.lastName || 'Singh');
+    await fillMobileNumber(driver, data.mobileNumber || '9391345768');
 
-    await fillHouseNo(driver, data.houseNo || '23A');
-    await fillWardNo(driver, data.wardNo || '08');
-    await fillWardName(driver, data.wardName || 'Green Park');
-    await fillMohallaName(driver, data.mohallaName || 'Meera Nagar');
+    await fillHouseNo(driver, data.houseNo || '42B');
+    await fillWardNo(driver, data.wardNo || '12');
+    await fillWardName(driver, data.wardName || 'Market Square');
+    await fillMohallaName(driver, data.mohallaName || 'Rajpur Nagar');
 
     await selectEconomicStatus(driver, data.economicStatus || 'APL');
 
@@ -419,12 +422,12 @@ async function fillHouseholdFormWithExamples(driver, data = {}) {
 
     await selectHouseOwnership(driver, data.houseOwnership || 'Yes');
     await selectSeparateKitchen(driver, data.separateKitchen || 'Yes');
-    await selectTypeOfFuel(driver, data.typeOfFuel || 'Induction');
-    await selectPrimaryWaterSource(driver, data.primaryWaterSource || 'Hand pump outside of house');
-    await selectElectricityAvailability(driver, data.electricity || 'Solar Power');
-    await selectToiletAvailability(driver, data.toilet || 'Pit toilet without water supply');
+    await selectTypeOfFuel(driver, data.typeOfFuel || randomPick(DROPDOWN_OPTIONS.typeOfFuel));
+    await selectPrimaryWaterSource(driver, data.primaryWaterSource || randomPick(DROPDOWN_OPTIONS.waterSource));
+    await selectElectricityAvailability(driver, data.electricity || randomPick(DROPDOWN_OPTIONS.electricity));
+    await selectToiletAvailability(driver, data.toilet || randomPick(DROPDOWN_OPTIONS.toilet));
 
-    if (await driver.isKeyboardShown()) await driver.hideKeyboard();
+    await hideKeyboardSafe(driver);
     await driver.pause(1000);
 
     console.log('✅ All household form fields filled!');

@@ -1,128 +1,61 @@
 const { remote } = require("webdriverio");
 
+// Import ONLY the functions you want to test from your steps file
+const {
+    selectCommunity,
+    selectReligion
+} = require("./steps/headOfFamilySteps");
+
 async function main() {
-  // Launch Appium session
+  // Launch Appium session (attaches to the currently open app due to noReset: true)
   const driver = await remote({
     protocol: "http",
     hostname: "localhost",
     port: 4723,
     path: "/",
-    capabilities: {
-      platformName: "Android",
-      "appium:deviceName": "ZD222X4TDK",
-      "appium:automationName": "UiAutomator2",
-      "appium:appPackage": "org.piramalswasthya.sakhi.mitanin.uat",
-      "appium:appActivity": "org.piramalswasthya.sakhi.ui.login_activity.LoginActivity",
-      "appium:noReset": false,
-      "appium:autoGrantPermissions": true,
-      "appium:newCommandTimeout": 300,
-      "appium:language": "en",       // ✅ Add this
-      "appium:locale": "US"
+    capabilities: { // <--- FIXED HERE (colon instead of equals)
+      platformName: 'Android',
+      'appium:automationName': 'UiAutomator2',
+      'appium:deviceName': 'ZD222X4TDK',
+      'appium:appPackage': 'org.piramalswasthya.sakhi.saksham.uat',
+      'appium:appActivity': 'org.piramalswasthya.sakhi.ui.login_activity.LoginActivity',
+      'appium:noReset': true,
+      'appium:enforceXPath1': true
     }
   });
 
-  console.log("✅ App launched successfully!");
+  console.log("✅ App session attached successfully!");
 
-  // Step 0.5: Select English language
-  const englishRadio = await driver.$(
-    'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/rb_eng")'
-  );
-  await englishRadio.waitForDisplayed({ timeout: 5000 });
-  await englishRadio.click();
-  console.log("✅ English language selected");
+  try {
+      console.log("🚀 Testing Community and Religion Dropdowns...");
+      console.log("⚠️ Note: Ensure your device is currently on the Head of Family Registration form.");
 
-  // Step 1: Enter username
-  const usernameField = await driver.$(
-    'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/et_username")'
-  );
-  await usernameField.waitForDisplayed({ timeout: 10000 });
-  await usernameField.setValue("lily");
-  console.log("✅ Username entered");
+      // 1. Test Community Dropdown
+      await selectCommunity(driver, "SC");
+      await driver.pause(2000); // Brief pause so you can visually verify on your screen
 
-  // Step 2: Enter password
-  const passwordField = await driver.$(
-    'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/et_password")'
-  );
-  await passwordField.waitForDisplayed({ timeout: 10000 });
-  await passwordField.setValue("Test@123");
-  console.log("✅ Password entered");
+      // 2. Test Religion Dropdown
+      await selectReligion(driver, "Hindu");
+      await driver.pause(2000); // Brief pause so you can visually verify on your screen
 
-  // Step 3: Click login
-  const loginButton = await driver.$(
-    'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/btn_login")'
-  );
-  await loginButton.waitForDisplayed({ timeout: 10000 });
-  await loginButton.click();
-  console.log("✅ Login button clicked");
+      console.log("🎉 Dropdown test completed successfully!");
 
-  // Step 4: Select village
-  const villageDropdown = await driver.$(
-    'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/actv_village_dropdown")'
-  );
-  await villageDropdown.waitForDisplayed({ timeout: 15000 });
-  await villageDropdown.click();
-  console.log("✅ Village dropdown opened");
+  } catch (error) {
+      console.error("❌ Test failed:", error);
 
-  const villageOption = await driver.$(
-    'android=new UiSelector().text("Dakhinhengra TE")'
-  );
-  await villageOption.waitForDisplayed({ timeout: 10000 });
-  await villageOption.click();
-  console.log("✅ 'Dakhinhengra TE' selected");
-
-  const continueButton = await driver.$(
-    'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/btn_continue")'
-  );
-  await continueButton.waitForDisplayed({ timeout: 10000 });
-  await continueButton.click();
-  console.log("🎉 Continue button clicked - process completed successfully!");
-
-  // Step 5: Wait for home/dashboard screen
-  await driver.pause(5000);
-
-  // Step 6: Click on Household section/card
-  const householdCard = await driver.$(
-    'android=new UiSelector().textContains("Household")'
-  );
-  await householdCard.waitForDisplayed({ timeout: 10000 });
-  await householdCard.click();
-  console.log("🏠 Household section opened successfully!");
-  // Click on "New Household Registration" button
-const newHouseholdBtn = await driver.$(
-  'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/btn_next_page")'
-);
-
-await newHouseholdBtn.waitForDisplayed({ timeout: 10000 });
-await newHouseholdBtn.click();
-
-console.log("✅ New Household Registration button clicked");
-// Consent checkbox
-const consentCheckbox = await driver.$(
-  'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/checkBox")'
-);
-await consentCheckbox.waitForDisplayed({ timeout: 15000 });
-await consentCheckbox.click();
-console.log("✅ Consent checkbox clicked");
-
-// Small pause for UI stability
-await driver.pause(1000);
-
-// Agree button
-const agreeButton = await driver.$(
-  'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.mitanin.uat:id/btn_positive")'
-);
-await agreeButton.waitForDisplayed({ timeout: 15000 });
-await agreeButton.click();
-console.log("✅ AGREE button clicked");
-
-
-  // Optional pause to observe
-  await driver.pause(3000);
-
-
+      try {
+          const screenshot = await driver.takeScreenshot();
+          const fs = require('fs');
+          fs.writeFileSync(`error-dropdowns-${Date.now()}.png`, screenshot, 'base64');
+          console.log("📸 Screenshot saved for debugging");
+      } catch (screenshotError) {
+          console.error("Could not take screenshot:", screenshotError);
+      }
+  } finally {
+      await driver.deleteSession();
+  }
 }
 
-
 main().catch(err => {
-  console.error("❌ Test failed:", err);
+  console.error("❌ Main function failed:", err);
 });

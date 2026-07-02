@@ -360,7 +360,6 @@ async function pickTimeFromClock(driver, timeObj) {
     await okBtn.click();
 }
 
-// ── Form Field Handlers ───────────────────────────────────────────────────────
 async function fillDeliveryDate(driver) {
     console.log('Processing Date of Delivery...');
     await scrollDownToText(driver, "Date of Delivery", 2);
@@ -370,9 +369,9 @@ async function fillDeliveryDate(driver) {
 
     if (await field.isExisting() && await field.isDisplayed()) {
         const currentText = await field.getText();
-        const targetDateString = `${String(FORM_DATA.deliveryDate.day).padStart(2, '0')}-${String(FORM_DATA.deliveryDate.month).padStart(2, '0')}-${FORM_DATA.deliveryDate.year}`;
 
-        if (await isEmpty(field, 'Date of Delivery *') || currentText !== targetDateString) {
+        // Check ONLY if the field is empty or still showing the hint text
+        if (await isEmpty(field, 'Date of Delivery *')) {
             console.log(`⏳ Clicking Date of Delivery field to open calendar...`);
             await field.click();
             await driver.pause(2000);
@@ -380,7 +379,8 @@ async function fillDeliveryDate(driver) {
             await pickDateFromCalendar(driver, FORM_DATA.deliveryDate);
             console.log('✔ Date of Delivery filled successfully.');
         } else {
-            console.log(`➡ Date of Delivery is already correctly filled with: ${currentText}`);
+            // If it has any other value, skip calendar selection
+            console.log(`➡ Date of Delivery is already filled with: ${currentText}. Skipping to next field.`);
         }
     } else {
         console.error('❌ Could not find "Date of Delivery" field.');

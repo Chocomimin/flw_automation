@@ -1,6 +1,6 @@
 const { remote } = require('webdriverio');
 const { fillAncForm } = require("./ancVisitForm");
-const{fillMdsrForm}=require("./Mdsr");
+const { fillMdsrForm } = require("./Mdsr");
 
 const capabilities = {
     platformName: 'Android',
@@ -11,7 +11,6 @@ const capabilities = {
     'appium:noReset': true,
     'appium:enforceXPath1': true
 };
-
 
 async function clickDashboardCard(driver, cardText) {
     const cardXPath = `//android.widget.TextView[@text="${cardText}"]/ancestor::android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/cv_icon"]`;
@@ -27,32 +26,22 @@ async function clickDashboardCard(driver, cardText) {
     }
 }
 
-
 async function searchAndAddAncVisit(driver, searchName) {
     try {
         console.log(`Waiting for the search bar to load...`);
 
-
         const searchBar = await driver.$('//android.widget.EditText[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/searchView"]');
         await searchBar.waitForDisplayed({ timeout: 10000 });
-
 
         await searchBar.click();
         await driver.pause(1000);
 
-
         console.log(`⌨️ Typing "${searchName}" using the keyboard...`);
-
-
         await driver.keys([...searchName]);
-
-
         await driver.pause(2000);
-
 
         const specificAddAncButtonXPath = `//android.widget.TextView[@text="${searchName}"]/ancestor::android.widget.FrameLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/cv_content"]//android.widget.Button[@text="ADD ANC VISIT"]`;
         const addAncButton = await driver.$(specificAddAncButtonXPath);
-
 
         await addAncButton.waitForDisplayed({ timeout: 10000 });
         await addAncButton.click();
@@ -65,9 +54,7 @@ async function searchAndAddAncVisit(driver, searchName) {
     }
 }
 
-
 async function runTest() {
-
     const driver = await remote({
         path: '/',
         port: 4723,
@@ -75,26 +62,34 @@ async function runTest() {
     });
 
     try {
-        console.log("App launched. Attempting to click ANC Visits...");
+        console.log("App launched. Attempting to click Maternal Health...");
 
+        // 1. Click Maternal Health First
+        await clickDashboardCard(driver, 'Maternal Health');
+        await driver.pause(2000); // Brief pause to allow the next screen/options to load
 
+        // 2. Then Click ANC Visits
+        console.log("Attempting to click ANC Visits...");
         await clickDashboardCard(driver, 'ANC Visits');
-
-
         await driver.pause(2000);
 
-
-        await searchAndAddAncVisit(driver, 'ANANYA VERMA');
+        // 3. Search and Fill Forms
+        await searchAndAddAncVisit(driver, 'KIYA H');
         await fillAncForm(driver);
         await fillMdsrForm(driver);
+
     } catch (err) {
         console.error("Test execution failed.", err);
     } finally {
-
         await driver.pause(3000);
         await driver.deleteSession();
     }
 }
 
 
-runTest();
+module.exports = { runTest,clickDashboardCard,searchAndAddAncVisit};
+
+// Execute directly ONLY if this specific file is run from the command line
+if (require.main === module) {
+    runTest();
+}

@@ -7,10 +7,17 @@ const MONTH_NAMES = [
     'October', 'November', 'December'
 ];
 
-// ─────────────────────────────────────────────────────────────
-//  CORE HELPER — Scroll spinner into view
-// ─────────────────────────────────────────────────────────────
+function getRandomName(gender) {
+    const maleNames = ['Rahul', 'Amit', 'Vikram', 'Rohan', 'Sandeep', 'Arjun', 'Ramesh', 'Suresh', 'Karthik', 'Vijay'];
+    const femaleNames = ['Priya', 'Neha', 'Pooja', 'Anjali', 'Sneha', 'Rekha', 'Kavita', 'Sunita', 'Divya', 'Swati'];
+    const lastNames = ['Singh', 'Sharma', 'Patel', 'Kumar', 'Verma', 'Reddy', 'Gupta', 'Rao', 'Yadav', 'Das'];
 
+    const firstNames = gender === 'Male' ? maleNames : femaleNames;
+    const randomFirst = firstNames[Math.floor(Math.random() * firstNames.length)];
+    const randomLast = lastNames[Math.floor(Math.random() * lastNames.length)];
+
+    return `${randomFirst} ${randomLast}`;
+}
 async function scrollSpinnerToMiddle(driver, spinnerSelector) {
     try {
         const spinner = await driver.$(spinnerSelector);
@@ -63,16 +70,11 @@ async function tapByCoords(driver, tapX, tapY) {
     await driver.pause(500);
 }
 
-async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optionsList) {
-    // ── APPROACH: mirrors openSpinnerAndSelect() in ancVisitForm.js ──────────
-    // 1. Scroll spinner into view & get its live bounds
-    // 2. Tap the right-side arrow to open the popup
-    // 3. PRIMARY: read getPageSource() → regex for CheckedTextView bounds → tap centre
-    //    (getPageSource() returns ALL windows including the Popup Window that
-    //     hosts the CheckedTextView options, so bounds are always accurate)
-    // 4. FALLBACK: coordinate math using spinner position + row height + index
-    // ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+//  CORE HELPER — Shared spinner click + XML bounds tap
+// ─────────────────────────────────────────────────────────────
 
+async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optionsList) {
     await scrollSpinnerToMiddle(driver, spinnerSelector);
 
     const spinner = await driver.$(spinnerSelector);
@@ -82,90 +84,70 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
     const size = await spinner.getSize();
     console.log(`📍 Spinner @ (${loc.x}, ${loc.y}), size (${size.width}x${size.height})`);
 
-    // Tap the dropdown arrow on the right side of the spinner
     const tapX = Math.floor(loc.x + size.width - 40);
     const tapY = Math.floor(loc.y + size.height / 2);
+
     console.log(`📍 Tapping dropdown arrow at (${tapX}, ${tapY})`);
     await tapByCoords(driver, tapX, tapY);
-    await driver.pause(1000);
+    await driver.pause(2000);
 
-    // If keyboard appeared, close it and re-tap
     try {
-        if (await driver.isKeyboardShown()) {
-            console.log('⚠️ Keyboard opened after clicking dropdown! Closing it...');
-            await driver.hideKeyboard();
-            await driver.pause(1000);
-            console.log('🔄 Clicking dropdown again...');
-            await tapByCoords(driver, tapX, tapY);
-            await driver.pause(1500);
-        }
-    } catch (e) {}
-
-    // STRATEGY 1 (PRIMARY): Parse getPageSource() for CheckedTextView bounds and tap centre.
-    // getPageSource() in Appium returns the full XML across ALL windows, including the
-    // "Popup Window" that opens for these spinners — so the bounds are real screen coords.
-    try {
-        const source = await driver.getPageSource();
-        const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-        // Match CheckedTextView with exact text first (most precise)
-        const checkedPattern = new RegExp(
-            `class="android\\.widget\\.CheckedTextView"[^>]*?text="${escapedValue}"[^>]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`,
-            's'
-        );
-        // Generic fallback: any node with matching text and bounds
-        const genericPattern = new RegExp(
-            `text="${escapedValue}"[^>]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`
-        );
-
-        const match = source.match(checkedPattern) || source.match(genericPattern);
-        if (match) {
-            const bx = Math.floor((parseInt(match[1]) + parseInt(match[3])) / 2);
-            const by = Math.floor((parseInt(match[2]) + parseInt(match[4])) / 2);
-            console.log(`📍 Found "${value}" in page source → tap(${bx}, ${by})`);
-            await tapByCoords(driver, bx, by);
-            console.log(`✅ Selected "${value}" via page source bounds`);
-            return;
-        }
-        console.log(`⚠️  "${value}" not found in page source`);
+        const item = await driver.$(`//*[@text="${value}"]`);
+        await item.waitForDisplayed({ timeout: 4000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via XPath`);
+        return;
     } catch (e) {
-        console.log(`⚠️  Page source strategy failed: ${e.message}`);
+        console.log(`⚠️  XPath strategy failed: ${e.message}`);
     }
 
-    // STRATEGY 2 (FALLBACK): Coordinate math using spinner position + row height × index.
-    // Uses fresh bounds in case a scroll shifted the spinner since strategy 1.
-    const idx = optionsList.indexOf(value);
-    if (idx === -1) throw new Error(`"${value}" not in options: [${optionsList.join(', ')}]`);
-
-    const freshLoc  = await spinner.getLocation();
-    const freshSize = await spinner.getSize();
-    let screenHeight = 2400;
-    let screenWidth  = 1080;
     try {
-        const screen = await driver.getWindowRect();
-        screenHeight = screen.height;
-        screenWidth  = screen.width;
-    } catch (e) {}
+        const item = await driver.$(`android=new UiSelector().text("${value}")`);
+        await item.waitForDisplayed({ timeout: 3000 });
+        await item.click();
+        console.log(`✅ Selected "${value}" via UiSelector`);
+        return;
+    } catch (e) {
+        console.log(`⚠️  UiSelector strategy failed: ${e.message}`);
+    }
 
-    const rowHeight     = freshSize.height;
-    const spinnerBottom = freshLoc.y + freshSize.height;
-    const spaceBelow    = screenHeight - spinnerBottom;
-    const opensUpward   = spaceBelow < (optionsList.length * rowHeight);
-    const finalTapX     = Math.floor(freshLoc.x + freshSize.width / 2);
+    const screen = await driver.getWindowRect();
+    const idx = optionsList.indexOf(value);
+    if (idx === -1) throw new Error(`"${value}" not in list: [${optionsList.join(', ')}]`);
+
+    const rowHeight     = size.height;
+    const spinnerBottom = loc.y + size.height;
+    const opensUpward   = (screen.height - spinnerBottom) < (optionsList.length * rowHeight);
+    const finalTapX     = Math.floor(loc.x + size.width / 2);
     let   finalTapY;
 
     if (opensUpward) {
-        const popupTop = freshLoc.y - (optionsList.length * rowHeight);
-        finalTapY = Math.floor(popupTop + (idx * rowHeight) + rowHeight / 2);
+        const reversedIdx = (optionsList.length - 1) - idx;
+        finalTapY = Math.floor(loc.y - (reversedIdx * rowHeight) - (rowHeight / 2));
     } else {
-        finalTapY = Math.floor(spinnerBottom + (idx * rowHeight) + rowHeight / 2);
+        finalTapY = Math.floor(spinnerBottom + (idx * rowHeight) + (rowHeight / 2));
     }
-    finalTapY = Math.max(5, Math.min(finalTapY, screenHeight - 5));
+    finalTapY = Math.max(5, Math.min(finalTapY, screen.height - 5));
 
     console.log(`📍 Coordinate fallback → tap(${finalTapX}, ${finalTapY})`);
     await tapByCoords(driver, finalTapX, finalTapY);
     console.log(`✅ Selected "${value}" via coordinates`);
 }
+
+async function handleAddSpousePopup(driver) {
+    console.log("🔍 Checking for 'Add Spouse' popup...");
+    try {
+        // Wait for the "No" button using the exact resource-id and text from the XML
+        const noButton = await driver.$('android=new UiSelector().resourceId("android:id/button2").text("No")');
+        await noButton.waitForDisplayed({ timeout: 5000 }); // 5 seconds should be enough for the dialog to transition
+        await noButton.click();
+        console.log("✅ Clicked 'No' on the Add Spouse popup.");
+        await driver.pause(1500); // Brief pause to let the dialog dismiss
+    } catch (e) {
+        console.log("ℹ️ 'Add Spouse' popup did not appear. Continuing...");
+    }
+}
+
 async function getCalendarMonthYear(driver) {
     try {
         const cells = await driver.$$('//android.view.View[@resource-id="android:id/month_view"]/android.view.View');
@@ -272,72 +254,20 @@ async function navigateCalendarToMonth(driver, targetMonth, targetYear) {
     }
 
     // 2. Select the Month
-    //
-    // ROOT CAUSE OF CRASHES: calling element.click() on android:id/prev or android:id/next
-    // while UiAutomator2 has active element references causes the instrumentation to die.
-    // Similarly, querying month_view child elements right after a navigation click races
-    // with the ViewPager animation and also crashes it.
-    //
-    // SAFE APPROACH:
-    //   a) Resolve button coordinates ONCE from page source (no live element refs in the loop).
-    //   b) Read the current month by parsing page source text (no element queries mid-loop).
-    //   c) Tap by coordinates — bypasses the accessibility layer entirely.
-    //   d) Wait 1.2s after each tap for the ViewPager animation to finish before next read.
+    const prevBtn = await driver.$('//android.widget.ImageButton[@resource-id="android:id/prev"]');
+    for (let i = 0; i < 36; i++) {
+        const cur = await getCalendarMonthYear(driver);
+        if (!cur) break;
+        const curTotal = cur.year * 12 + cur.month;
+        const tgtTotal = targetYear * 12 + targetMonth;
 
-    async function getNavButtonCoords(drv) {
-        const src = await drv.getPageSource();
-        const prevMatch = src.match(/resource-id="android:id\/prev"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/)
-                       || src.match(/content-desc="Previous month"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-        const nextMatch = src.match(/resource-id="android:id\/next"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/)
-                       || src.match(/content-desc="Next month"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-        if (!prevMatch || !nextMatch) return null;
-        return {
-            prev: { x: Math.floor((+prevMatch[1] + +prevMatch[3]) / 2), y: Math.floor((+prevMatch[2] + +prevMatch[4]) / 2) },
-            next: { x: Math.floor((+nextMatch[1] + +nextMatch[3]) / 2), y: Math.floor((+nextMatch[2] + +nextMatch[4]) / 2) },
-        };
-    }
-
-    async function getCurrentMonthFromSource(drv) {
-        try {
-            const src = await drv.getPageSource();
-            const match = src.match(/content-desc="(\d{2})\s+(\w+)\s+(\d{4})"/);
-            if (match) {
-                const month = MONTH_NAMES.findIndex(m => m.toLowerCase() === match[2].toLowerCase());
-                const year  = parseInt(match[3], 10);
-                if (month > 0) {
-                    console.log(`   📆 Source-parsed month: ${MONTH_NAMES[month]} ${year}`);
-                    return { month, year };
-                }
-            }
-        } catch (e) {
-            console.warn(`   ⚠️  getCurrentMonthFromSource failed: ${e.message}`);
+        if (curTotal === tgtTotal) break;
+        if (curTotal > tgtTotal) {
+            await prevBtn.click();
+        } else {
+            await swipeHorizontalCalendar(driver, 'left');
         }
-        return null;
-    }
-
-    let navCoords = await getNavButtonCoords(driver);
-    if (!navCoords) {
-        console.warn('   ⚠️  Could not resolve prev/next button coordinates. Skipping month nav.');
-    } else {
-        for (let i = 0; i < 36; i++) {
-            const cur = await getCurrentMonthFromSource(driver);
-            if (!cur) { console.warn('   ⚠️  Could not read calendar month — stopping.'); break; }
-
-            const curTotal = cur.year * 12 + cur.month;
-            const tgtTotal = targetYear * 12 + targetMonth;
-            if (curTotal === tgtTotal) break;
-
-            if (curTotal > tgtTotal) {
-                console.log(`   ◀ Tapping Prev (${navCoords.prev.x},${navCoords.prev.y}) — ${MONTH_NAMES[cur.month]} ${cur.year}`);
-                await tapByCoords(driver, navCoords.prev.x, navCoords.prev.y);
-            } else {
-                console.log(`   ▶ Tapping Next (${navCoords.next.x},${navCoords.next.y}) — ${MONTH_NAMES[cur.month]} ${cur.year}`);
-                await tapByCoords(driver, navCoords.next.x, navCoords.next.y);
-            }
-            // Wait for ViewPager animation before next page source read
-            await driver.pause(1200);
-            navCoords = await getNavButtonCoords(driver) || navCoords;
-        }
+        await driver.pause(600);
     }
 }
 async function handleConsentForm(driver) {
@@ -367,33 +297,9 @@ async function handleConsentForm(driver) {
     }
 }
 
-async function handleOtpVerification(driver) {
-    console.log("📲 Initiating OTP Verification...");
-    try {
-        // 1. Find and click the OTP generation/trigger button
-        // Update the locator below to match your actual app's 'Get OTP' button
-        const otpButton = await driver.$('android=new UiSelector().textContains("OTP")');
-        await otpButton.waitForDisplayed({ timeout: 10000 });
-        await otpButton.click();
-        console.log("✅ Clicked on OTP button. Waiting 20 seconds for entry...");
-
-        // 2. Wait exactly 20 seconds for auto-read or manual entry
-        await driver.pause(20000);
-        console.log("⏳ 20 seconds elapsed. Proceeding to next step...");
-
-        // 3. Click 'Next', 'Verify', or 'Submit' if required after OTP entry
-        // Update the locator below to match your actual 'Next' button
-        const nextButton = await driver.$('android=new UiSelector().textContains("Next")');
-        if (await nextButton.isExisting()) {
-            await nextButton.click();
-            console.log("✅ Clicked Next after OTP.");
-            await driver.pause(2000); // Brief pause to allow the next screen/layout to load
-        }
-
-    } catch (e) {
-        console.log(`⚠️ OTP flow encountered an issue: ${e.message}`);
-    }
-}
+// ─────────────────────────────────────────────────────────────
+//  2. Date of Birth Picker Handler (Replacing Age Input Flow)
+// ─────────────────────────────────────────────────────────────
 
 async function selectDateOfBirth(driver, dateObj) {
     const { day, month, year } = dateObj;
@@ -500,7 +406,7 @@ async function fillMotherName(driver, motherName) {
     console.log(`✅ Mother's Name entered: ${motherName}`);
 }
 
-async function fillSpouseNameIfExists(driver, spouseName) {
+async function fillSpouseNameIfExists(driver) {
     console.log("🔍 Checking if Husband's or Wife's Name field is present...");
     if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
 
@@ -513,13 +419,16 @@ async function fillSpouseNameIfExists(driver, spouseName) {
 
     let fieldToFill = null;
     let fieldNameStr = "";
+    let spouseName = "";
 
     if (await wifeField.isExisting()) {
         fieldToFill = wifeField;
         fieldNameStr = "Wife's Name";
+        spouseName = getRandomName('Female');
     } else if (await husbandField.isExisting()) {
         fieldToFill = husbandField;
         fieldNameStr = "Husband's Name";
+        spouseName = getRandomName('Male');
     }
 
     if (fieldToFill) {
@@ -578,22 +487,16 @@ async function selectHaveChildrenIfExists(driver, hasChildren = "Yes") {
 //  6. Community Selection
 // ─────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────
-//  6. Community Selection (UPDATED)
-// ─────────────────────────────────────────────────────────────
 async function selectCommunity(driver, value = "General") {
     if (await driver.isKeyboardShown()) {
         await driver.hideKeyboard();
         await driver.pause(1000);
     }
-    // Scroll until the label is visible
     await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Community"))');
     await driver.pause(1000);
-
-    // ✅ Use descriptionContains to target the content-desc attribute "Community"
     await clickSpinnerAndSelectOption(
         driver,
-        'android=new UiSelector().descriptionContains("Community")',
+        'android=new UiSelector().className("android.widget.Spinner").textContains("Community")',
         value,
         ['General', 'SC', 'ST', 'BC', 'OBC', 'OC', 'PVTG – Primitive Vulnerable Tribal Groups', 'Not given']
     );
@@ -601,101 +504,49 @@ async function selectCommunity(driver, value = "General") {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  7. Religion Selection (UPDATED)
+//  7. Religion Selection
 // ─────────────────────────────────────────────────────────────
+
 async function selectReligion(driver, value = "Hindu") {
     if (await driver.isKeyboardShown()) {
         await driver.hideKeyboard();
         await driver.pause(1000);
     }
-    // Scroll until the label is visible
     await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Religion"))');
     await driver.pause(1000);
-
-    // ✅ Use descriptionContains to target the content-desc attribute "Religion"
     await clickSpinnerAndSelectOption(
         driver,
-        'android=new UiSelector().descriptionContains("Religion")',
+        'android=new UiSelector().className("android.widget.Spinner").textContains("Religion")',
         value,
         ['Hindu', 'Muslim', 'Christian', 'Sikhism', 'Buddhism', 'Jainism', 'Parsi', 'Other', 'Not disclosed']
     );
     console.log(`✅ Religion: ${value}`);
 }
-async function fillRchIdIfExists(driver, rchId) {
-    console.log("🔍 Checking if 'RCH ID' field is present...");
-    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
-
-    try {
-        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollForward()');
-    } catch (e) {}
-
-    const rchField = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("RCH ID")');
-
-    if (await rchField.isExisting()) {
-        console.log("✅ Found RCH ID field. Filling it...");
-        await rchField.click();
-        await rchField.setValue(rchId);
-        if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
-        console.log(`✅ RCH ID entered: ${rchId}`);
-    } else {
-        console.log("⏭️ RCH ID field not present. Moving next.");
-    }
-}
 
 // ─────────────────────────────────────────────────────────────
-//  8. STATUS OF WOMEN CHECK HELPER
+//  8. Status Of Women Selection
 // ─────────────────────────────────────────────────────────────
-async function checkStatusOfWomenField(driver, contextInfo = "Beneficiary") {
-    console.log(`\n🔍 Checking 'Status Of Women' field presence for: ${contextInfo}...`);
-    try {
-        const statusLabel = await driver.$('android=new UiSelector().textContains("Status Of Women")');
-        const exists = await statusLabel.isExisting();
-        if (exists) {
-            console.log(`✅ FIELD REPORT [${contextInfo}]: 'Status Of Women' field IS present.`);
-            return true;
-        } else {
-            console.log(`📋 FIELD REPORT [${contextInfo}]: 'Status Of Women' field is NOT present.`);
-            return false;
-        }
-    } catch (e) {
-        console.log(`📋 FIELD REPORT [${contextInfo}]: 'Status Of Women' field is NOT present. (Not Found)`);
-        return false;
-    }
-}
-async function selectStatusOfWomenIfExists(driver, value) {
-    console.log("🔍 Checking if 'Status Of Women' field is present...");
 
+async function selectStatusOfWomen(driver, value = "Eligible Couple") {
     if (await driver.isKeyboardShown()) {
         await driver.hideKeyboard();
         await driver.pause(1000);
     }
-
-    // Scroll forward slightly to ensure the UI renders the bottom elements
-    try {
-        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollForward()');
-    } catch (e) {}
-
-    const statusLabel = await driver.$('android=new UiSelector().textContains("Status Of Women")');
-
-    // Check if the element exists without a massive timeout
-    if (await statusLabel.isExisting()) {
-        console.log(`✅ Found 'Status Of Women' field. Selecting '${value}'...`);
-
-        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Status Of Women"))');
-        await driver.pause(1000);
-
-        // Passed the exact 4 elements seen in the app's dynamic XML layout
-        await clickSpinnerAndSelectOption(
-            driver,
-            'android=new UiSelector().className("android.widget.Spinner").textContains("Status Of Women")',
-            value,
-            ['Eligible Couple', 'Pregnant Woman', 'Postnatal Mother', 'Permanently Sterilised']
-        );
-        console.log(`✅ Status Of Women: ${value}`);
-    } else {
-        console.log("⏭️ 'Status Of Women' field not present. Moving next.");
-    }
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Status Of Women"))');
+    await driver.pause(1000);
+    await clickSpinnerAndSelectOption(
+        driver,
+        'android=new UiSelector().className("android.widget.Spinner").textContains("Status Of Women")',
+        value,
+        ['Eligible Couple', 'Pregnant Woman', 'Postnatal Mother', 'Permanently Sterilised']
+    );
+    console.log(`✅ Status Of Women: ${value}`);
 }
+
+// ─────────────────────────────────────────────────────────────
+//  9. Final Submission
+// ─────────────────────────────────────────────────────────────
+
 async function submitFinalForm(driver) {
     if (await driver.isKeyboardShown()) {
         await driver.hideKeyboard();
@@ -725,90 +576,42 @@ async function submitFinalForm(driver) {
     }
 }
 
-async function handleAddSpousePopup(driver) {
-    console.log("🔍 Checking for 'Add Spouse' popup...");
-    try {
-        // Wait for the "No" button using the exact resource-id and text from the XML
-        const noButton = await driver.$('android=new UiSelector().resourceId("android:id/button2").text("No")');
-        await noButton.waitForDisplayed({ timeout: 5000 }); // 5 seconds should be enough for the dialog to transition
-        await noButton.click();
-        console.log("✅ Clicked 'No' on the Add Spouse popup.");
-        await driver.pause(1500); // Brief pause to let the dialog dismiss
-    } catch (e) {
-        console.log("ℹ️ 'Add Spouse' popup did not appear. Continuing...");
-    }
-}
-async function fillHeadOfFamilyFormWithExamples(driver, targetMaritalStatus = "Married", gender = "Female") {
-    console.log(`📝 Filling Head of Family form for a ${gender} (Status: ${targetMaritalStatus})...`);
+// ─────────────────────────────────────────────────────────────
+//  10. Master Function
+// ─────────────────────────────────────────────────────────────
+
+async function fillHeadOfFamilyFormWithExamples(driver, targetMaritalStatus = "Married") {
+    console.log("📝 Filling Head of Family form with updated example data...");
 
     await handleConsentForm(driver);
-    await handleOtpVerification(driver);
 
     // Explicitly handles DOB choice using the automated calendar popup loops
-    const exampleDOB = { day: 15, month: 3, year: 1985 };
+    const exampleDOB = { day: 29, month: 5, year: 1990 };
     await selectDateOfBirth(driver, exampleDOB);
 
-    // ✅ Passes the dynamic gender parameter
-    await selectGender(driver, gender);
+    await selectGender(driver, "Female");
     await selectMaritalStatus(driver, targetMaritalStatus);
 
-    await fillFatherName(driver, "Rajendra Kumar");
-    await fillMotherName(driver, "Meera Kumari");
+    const randomFather = getRandomName('Male');
+    const randomMother = getRandomName('Female');
 
-    // ✅ Dynamically provides a Wife or Husband name based on the gender profile
-    const spouseName = gender === "Male" ? "Sita Kumari" : "Krupal Singh";
-    await fillSpouseNameIfExists(driver, spouseName);
+    await fillFatherName(driver, randomFather);
+    await fillMotherName(driver, randomMother);
 
+    await fillSpouseNameIfExists(driver);
     await fillAgeAtMarriageIfExists(driver, "24");
-
-    // ✅ Bypasses 'Children' column for Male beneficiaries
-    if (gender === "Female") {
-        await selectHaveChildrenIfExists(driver, "Yes");
-    }
+    await selectHaveChildrenIfExists(driver, "No");
 
     await selectCommunity(driver, "OBC");
     await selectReligion(driver, "Christian");
+    await selectStatusOfWomen(driver, "Eligible Couple");
 
-    // ✅ Bypasses 'Status Of Women' column for Male beneficiaries
-    // AFTER
-let statusOfWomenFound = false;
+    console.log("✅ Head of Family form filled successfully!");
+    await submitFinalForm(driver);
+    await handleAddSpousePopup(driver);
 
-if (gender === "Female") {
-    statusOfWomenFound = await checkStatusOfWomenField(driver, `${gender}`); // ✅ Check BEFORE selecting
-    await selectStatusOfWomenIfExists(driver, "Pregnant Woman");
-    const randomRchId = Math.floor(100000000000 + Math.random() * 900000000000).toString();
-    await fillRchIdIfExists(driver, randomRchId);
 }
-
-console.log("✅ Head of Family form filled successfully!");
-await submitFinalForm(driver);
-await handleAddSpousePopup(driver);
-
-return statusOfWomenFound; // ✅ Return it so the main file can use it
-}
-
-// ── REPLACE the existing module.exports at the bottom of headOfFamilySteps.js ──
 
 module.exports = {
-  // Master wrapper (used by existing tests)
-  fillHeadOfFamilyFormWithExamples,
-
-  // Individual steps (needed by maleHouseholdTest.js / fillHeadOfFamilyFormRandom)
-  handleConsentForm,
-  handleOtpVerification,
-  selectDateOfBirth,
-  selectGender,
-  selectMaritalStatus,
-  fillFatherName,
-  fillMotherName,
-  fillSpouseNameIfExists,
-  fillAgeAtMarriageIfExists,
-  selectHaveChildrenIfExists,
-  selectCommunity,
-  selectReligion,
-  selectStatusOfWomenIfExists,
-  submitFinalForm,
-  handleAddSpousePopup,
-  checkStatusOfWomenField,
-fillRchIdIfExists,
+    fillHeadOfFamilyFormWithExamples
 };
