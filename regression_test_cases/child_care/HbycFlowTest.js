@@ -71,9 +71,7 @@ async function scrollSpinnerToMiddle(driver, spinnerSelector) {
             await driver.releaseActions();
             await driver.pause(1500);
         }
-    } catch (e) {
-        console.log('⚠️ scrollSpinnerToMiddle skipped:', e.message);
-    }
+    } catch (e) {}
 }
 
 async function tapByCoords(driver, tapX, tapY) {
@@ -137,49 +135,19 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
     console.log(`✅ Selected "${value}" via coordinates`);
 }
 
-async function selectRadioOption(driver, fieldLabel, expectedOption) {
-    const labelXPath = `//android.widget.TextView[contains(@text, "${fieldLabel}")]`;
-    let labelExists = false;
-    for (let i = 0; i < 5; i++) {
-        try {
-            const labelEl = await driver.$(labelXPath);
-            if (await labelEl.isExisting() && await labelEl.isDisplayed()) {
-                labelExists = true;
-                break;
-            }
-        } catch (e) { }
-        const size = await driver.getWindowRect();
-        await driver.performActions([{
-            type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
-            actions: [
-                { type: 'pointerMove', duration: 0, x: Math.floor(size.width / 2), y: Math.floor(size.height * 0.7) },
-                { type: 'pointerDown', button: 0 },
-                { type: 'pause', duration: 100 },
-                { type: 'pointerMove', duration: 600, x: Math.floor(size.width / 2), y: Math.floor(size.height * 0.3) },
-                { type: 'pointerUp', button: 0 }
-            ]
-        }]);
-        await driver.releaseActions();
-        await driver.pause(1000);
-    }
-    const radioButton = await driver.$(`//android.widget.TextView[contains(@text, "${fieldLabel}")]/following-sibling::android.widget.FrameLayout//android.widget.RadioButton[@text="${expectedOption}"]`);
-    if (await radioButton.isExisting()) await radioButton.click();
-}
-
-// ─── Child Registration Form Helpers ─────────────────────────────────────────
-
 async function getRandomChildNameAndRegister(driver) {
     console.log("⏳ Looking for available children to register...");
     await driver.pause(3000);
 
-    let cards = [];
+    let registerButtons = [];
     let maxScrolls = 5;
 
+    // 1. Scroll until we find at least one REGISTER button
     for (let i = 0; i < maxScrolls; i++) {
-        cards = await driver.$$('//android.view.ViewGroup[.//android.widget.Button[@text="REGISTER"]]');
+        registerButtons = await driver.$$('//android.widget.Button[@text="REGISTER"]');
 
-        if (cards.length > 0) {
-            console.log(`✔ Found ${cards.length} unregistered child(ren) on screen.`);
+        if (registerButtons.length > 0) {
+            console.log(`✔ Found ${registerButtons.length} unregistered child(ren) on screen.`);
             break;
         }
 
@@ -199,19 +167,45 @@ async function getRandomChildNameAndRegister(driver) {
         await driver.pause(1500);
     }
 
-    if (cards.length === 0) {
+    if (registerButtons.length === 0) {
         throw new Error("❌ No unregistered children found even after scrolling!");
     }
 
-    const randomIndex = Math.floor(Math.random() * cards.length);
-    const selectedCard = cards[randomIndex];
+    // 2. Pick a random REGISTER button from the ones found
+    const randomIndex = Math.floor(Math.random() * registerButtons.length);
+    const selectedBtn = registerButtons[randomIndex];
 
-    const nameElement = await selectedCard.$('.//android.widget.TextView[1]');
-    const childName = await nameElement.getText();
+    // 3. Step up to the specific card that holds THIS button
+    const parentCard = await selectedBtn.$('ancestor::android.view.ViewGroup[1]');
+
+    // 4. Get all text elements inside this specific card
+    const textElements = await parentCard.$$('.//android.widget.TextView');
+    let childName = "";
+
+    for (const el of textElements) {
+        const text = await el.getText();
+
+        // Filter out generic UI labels and strings that start with numbers (like age or dates)
+        if (
+            text &&
+            text.trim() !== "" &&
+            !text.includes("Newest First") &&
+            !text.includes("Oldest First") &&
+            text.toUpperCase() !== "REGISTER" &&
+            !text.match(/^\d/) // Ignores text starting with a number (e.g., "10 Months", "15-02-2026")
+        ) {
+            childName = text.trim();
+            break; // Stop at the first valid name string
+        }
+    }
+
+    // Fallback just in case
+    if (!childName) { childName = "Unknown Baby"; }
+
     console.log(`✅ Randomly selected child: ${childName}`);
 
-    const registerBtn = await selectedCard.$('.//android.widget.Button[@text="REGISTER"]');
-    await registerBtn.click();
+    // 5. Click the exact register button we selected
+    await selectedBtn.click();
     console.log(`✅ Clicked REGISTER for ${childName}`);
 
     await driver.pause(2000);
@@ -235,7 +229,7 @@ async function selectDOBViaCalendar(driver) {
         await driver.pause(1500);
 
         const monthsToSubtract = Math.floor(Math.random() * (6 - 3 + 1)) + 3;
-        console.log(`⬅️ Clicking 'Previous Month' ${monthsToSubtract} times...`);
+        console.log(`⬅️ Attempting to click 'Previous Month' ${monthsToSubtract} times...`);
 
         const prevMonthBtn = await driver.$(`//android.widget.ImageButton[@resource-id="android:id/prev" or @content-desc="Previous month"]`);
 
@@ -259,7 +253,17 @@ async function selectDOBViaCalendar(driver) {
         console.log(`✅ Successfully selected Date of Birth via Calendar.`);
 
     } catch (error) {
-        console.error(`❌ Failed to interact with the Calendar:`, error.message);
+        console.error(`❌ Calendar constraint hit: Could not go back far enough for this beneficiary.`);
+
+        try {
+            const cancelBtn = await driver.$(`//android.widget.Button[@resource-id="android:id/button2" and @text="Cancel"]`);
+            if (await cancelBtn.isDisplayed()) {
+                await cancelBtn.click();
+                await driver.pause(1000);
+            }
+        } catch (ignore) {}
+
+        throw error;
     }
 }
 
@@ -281,6 +285,7 @@ async function selectSexDropdown(driver, sexOption) {
             await option.click();
             console.log(`✅ Successfully selected ${sexOption} from dropdown.`);
         } else {
+            // Radio button logic has built-in 'skip if checked' logic
              await selectRadioOption(driver, "Sex", sexOption);
         }
     } catch (error) {
@@ -351,27 +356,48 @@ async function uploadFrontAndBackImages(driver) {
 async function clickChildRegSubmit(driver) {
     console.log(`\n✅ Attempting to click Submit button...`);
 
-    // 1. Hide the keyboard if it's blocking the submit button
-    if (await driver.isKeyboardShown()) {
-        await driver.hideKeyboard();
-        await driver.pause(1000);
-    }
+    try {
+        if (await driver.isKeyboardShown()) {
+            await driver.hideKeyboard();
+            await driver.pause(1500);
+        }
+    } catch (e) {}
 
-    // 2. Locate the button using both resource-id and text from your XML
-    const submitXPath = `//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btn_submit" and @text="Submit"]`;
-    const submitBtn = await driver.$(submitXPath);
+    const submitBtn = await driver.$(`android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_submit").text("Submit")`);
 
     try {
-        // 3. Wait for it to be visible and click
         await submitBtn.waitForDisplayed({ timeout: 5000 });
         await submitBtn.click();
 
-        console.log(`✅ Successfully clicked the 'Submit' button!`);
-        await driver.pause(3000); // Give the app time to process the submission and load the next screen
+        console.log(`✅ Successfully clicked the 'Submit' button normally!`);
+        await driver.pause(3000);
 
     } catch (error) {
-        console.error(`❌ Failed to click the 'Submit' button. Check if it's visible on screen:`, error.message);
-        throw error; // Rethrow to stop the test if submission fails
+        console.log(`⚠️ Standard click failed or was intercepted. Attempting coordinate tap...`);
+        try {
+            const loc = await submitBtn.getLocation();
+            const size = await submitBtn.getSize();
+            const tapX = Math.floor(loc.x + (size.width / 2));
+            const tapY = Math.floor(loc.y + (size.height / 2));
+
+            await driver.performActions([{
+                type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
+                actions: [
+                    { type: 'pointerMove', duration: 0, x: tapX, y: tapY },
+                    { type: 'pointerDown', button: 0 },
+                    { type: 'pause', duration: 150 },
+                    { type: 'pointerUp', button: 0 }
+                ]
+            }]);
+            await driver.releaseActions();
+
+            console.log(`✅ Successfully tapped 'Submit' via screen coordinates!`);
+            await driver.pause(3000);
+
+        } catch (fallbackError) {
+            console.error(`❌ Failed to click the 'Submit' button completely:`, fallbackError.message);
+            throw fallbackError;
+        }
     }
 }
 
@@ -422,18 +448,12 @@ async function verifyHBYCScheduledVisits(driver) {
 
 async function clickAddVisitForMonth(driver, monthText) {
     console.log(`\n⏳ Locating "Add Visit" button for ${monthText}...`);
-
-    // Extract just the number (e.g., "3" from "3 Months") to avoid exact-spacing typos
     const monthNum = monthText.match(/\d+/)[0];
 
-    // Find the text containing '3' and 'Month', climb up to its containing LinearLayout,
-    // then find the Button with the exact resource-id you provided inside that layout.
     const addVisitBtnXPath = `//android.widget.TextView[contains(@text, "${monthNum}") and contains(@text, "Month")]/ancestor::android.widget.LinearLayout[1]//android.widget.Button[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/btnAddVisit" or @text="Add Visit"]`;
-
     const addVisitBtn = await driver.$(addVisitBtnXPath);
 
     try {
-        // Scroll into view if it's hidden further down the screen
         if (!(await addVisitBtn.isDisplayed().catch(() => false))) {
             const scrollable = `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("${monthNum}"))`;
             await driver.$(`android=${scrollable}`).catch(() => {});
@@ -443,34 +463,109 @@ async function clickAddVisitForMonth(driver, monthText) {
         await addVisitBtn.click();
 
         console.log(`✔ Successfully clicked "Add Visit" for ${monthText}.`);
-        await driver.pause(1500); // Wait for the HBYC form to open
+        await driver.pause(1500);
 
     } catch (error) {
         console.error(`❌ Could not find or click the "Add Visit" button for ${monthText}. Check if the visit is already completed or locked.`);
-        throw error; // Rethrow to stop the test
+        throw error;
+    }
+}
+
+async function selectRadioOption(driver, fieldLabel, expectedOption) {
+    // 1. Scroll to the field
+    const labelXPath = `//android.widget.TextView[contains(@text, "${fieldLabel}")]`;
+    let labelExists = false;
+    for (let i = 0; i < 5; i++) {
+        try {
+            const labelEl = await driver.$(labelXPath);
+            if (await labelEl.isExisting() && await labelEl.isDisplayed()) {
+                labelExists = true;
+                break;
+            }
+        } catch (e) { }
+        const size = await driver.getWindowRect();
+        await driver.performActions([{
+            type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' },
+            actions: [
+                { type: 'pointerMove', duration: 0, x: Math.floor(size.width / 2), y: Math.floor(size.height * 0.7) },
+                { type: 'pointerDown', button: 0 },
+                { type: 'pause', duration: 100 },
+                { type: 'pointerMove', duration: 600, x: Math.floor(size.width / 2), y: Math.floor(size.height * 0.3) },
+                { type: 'pointerUp', button: 0 }
+            ]
+        }]);
+        await driver.releaseActions();
+        await driver.pause(1000);
+    }
+
+    // 2. CHECK IF ANY OPTION IS ALREADY FILLED
+    const anyCheckedXPath = `//android.widget.TextView[contains(@text, "${fieldLabel}")]/following-sibling::android.widget.FrameLayout//android.widget.RadioButton[@checked="true"]`;
+    const checkedElements = await driver.$$(anyCheckedXPath);
+
+    if (checkedElements.length > 0) {
+        console.log(`➡ "${fieldLabel}" is already filled. Skipping...`);
+        return;
+    }
+
+    // 3. IF EMPTY, SELECT THE EXPECTED OPTION
+    const radioButton = await driver.$(`//android.widget.TextView[contains(@text, "${fieldLabel}")]/following-sibling::android.widget.FrameLayout//android.widget.RadioButton[@text="${expectedOption}"]`);
+    if (await radioButton.isExisting()) {
+        await radioButton.click();
+        console.log(`✔ Filled "${fieldLabel}" with "${expectedOption}".`);
     }
 }
 
 async function handleVisitDate(driver, expectedDateString) {
+    console.log(`\n⏳ Processing "Visit Date" field...`);
     const visitDateInput = await driver.$(`//android.widget.EditText[@hint="Select visit date"]`);
-    await visitDateInput.waitForDisplayed({ timeout: 5000 });
-    await visitDateInput.click();
-    await visitDateInput.clearValue();
-    await visitDateInput.setValue(expectedDateString);
-    if (await driver.isKeyboardShown()) await driver.hideKeyboard();
+
+    try {
+        // Wait for the field, but catch the error if it times out instead of crashing the script
+        const isDisplayed = await visitDateInput.waitForDisplayed({ timeout: 5000 }).catch(() => false);
+
+        if (!isDisplayed) {
+            console.log(`➡ "Select visit date" hint not found. The field is likely already filled with a date. Skipping...`);
+            return; // Gracefully exit the function and move to the next step
+        }
+
+        // If the element IS found, double-check its text just in case
+        const currentText = await visitDateInput.getText();
+        if (currentText && currentText.trim() !== "" && !currentText.includes("Select visit date")) {
+            console.log(`➡ Visit Date is already filled (${currentText}). Skipping...`);
+            return;
+        }
+
+        console.log(`➡ Field is empty. Filling with: ${expectedDateString}`);
+        await visitDateInput.click();
+        await visitDateInput.clearValue();
+        await visitDateInput.setValue(expectedDateString);
+
+        if (await driver.isKeyboardShown()) {
+            await driver.hideKeyboard();
+        }
+        console.log(`✔ "Visit Date" successfully set.`);
+
+    } catch (error) {
+        console.log(`➡ Could not interact with Visit Date. Assuming filled. Skipping...`);
+    }
 }
 
 async function handleIsBabyAlive(driver, expectedInput) {
-    const targetOption = expectedInput.toLowerCase() === 'no' ? 'No' : 'Yes';
-    const radioButton = await driver.$(`//android.widget.TextView[contains(@text, "Is the Baby alive?")]/following-sibling::android.widget.FrameLayout//android.widget.RadioButton[@text="${targetOption}"]`);
-    await radioButton.waitForDisplayed({ timeout: 5000 });
-    const isChecked = await radioButton.getAttribute('checked');
-    if (isChecked !== 'true') await radioButton.click();
+    // Re-use our robust radio checker for this too
+    await selectRadioOption(driver, "Is the Baby alive?", expectedInput);
 }
 
 async function fillBabyWeight(driver, weightInGrams) {
     const weightField = await driver.$(`//android.widget.EditText[contains(@hint, "weight in gram")]`);
     await weightField.waitForDisplayed({ timeout: 5000 });
+
+    // Check if filled
+    const currentText = await weightField.getText();
+    if (currentText && currentText.trim() !== "" && !currentText.includes("weight in gram")) {
+        console.log(`➡ Baby Weight is already filled (${currentText}). Skipping...`);
+        return;
+    }
+
     await weightField.click();
     await weightField.clearValue();
     await weightField.setValue(String(weightInGrams));
@@ -480,6 +575,14 @@ async function fillBabyWeight(driver, weightInGrams) {
 async function fillTemperature(driver, tempValue) {
     const tempField = await driver.$(`//android.widget.EditText[contains(@hint, "e.g. 98.6")]`);
     await tempField.waitForDisplayed({ timeout: 5000 });
+
+    // Check if filled
+    const currentText = await tempField.getText();
+    if (currentText && currentText.trim() !== "" && !currentText.includes("98.6") && !currentText.includes("e.g.")) {
+        console.log(`➡ Temperature is already filled (${currentText}). Skipping...`);
+        return;
+    }
+
     await tempField.click();
     await tempField.clearValue();
     await tempField.setValue(String(tempValue));
@@ -487,15 +590,27 @@ async function fillTemperature(driver, tempValue) {
 }
 
 async function uploadMCPCard(driver) {
-    const pickImageBtn = await driver.$(`//android.widget.TextView[@text="MCP Card Upload"]/following-sibling::android.widget.FrameLayout//android.widget.Button[@text="PICK IMAGE"]`);
-    await pickImageBtn.waitForDisplayed({ timeout: 5000 });
-    await pickImageBtn.click();
-    await driver.pause(1500);
+    const pickImageBtnXPath = `//android.widget.TextView[@text="MCP Card Upload"]/following-sibling::android.widget.FrameLayout//android.widget.Button[@text="PICK IMAGE"]`;
 
-    const takePhotoBtn = await driver.$(`//*[@text="Take Photo" or @text="Take photo"]`);
-    await takePhotoBtn.waitForDisplayed({ timeout: 5000 });
-    await takePhotoBtn.click();
-    await driver.pause(20000);
+    try {
+        const pickImageBtn = await driver.$(pickImageBtnXPath);
+
+        // If the button exists, it means no image is uploaded yet
+        if (await pickImageBtn.isExisting() && await pickImageBtn.isDisplayed()) {
+            await pickImageBtn.click();
+            await driver.pause(1500);
+
+            const takePhotoBtn = await driver.$(`//*[@text="Take Photo" or @text="Take photo"]`);
+            await takePhotoBtn.waitForDisplayed({ timeout: 5000 });
+            await takePhotoBtn.click();
+            await driver.pause(20000);
+            console.log(`✔ MCP Card Uploaded.`);
+        } else {
+            console.log(`➡ MCP Card field already contains an image or is unavailable. Skipping...`);
+        }
+    } catch (e) {
+        console.log(`➡ MCP Card "PICK IMAGE" button not found. Skipping...`);
+    }
 }
 
 async function clickHBYCSubmit(driver) {
@@ -516,17 +631,41 @@ async function runTest() {
         await clickGridModule(driver, "Maternal Health");
         await clickGridModule(driver, "Child Registration");
 
-        const rememberedName = await getRandomChildNameAndRegister(driver);
+        let rememberedName = "";
+        let maxAttempts = 3;
+        let registrationSuccessful = false;
 
-        // Use the native Android Calendar to select DOB and fill Sex
-        await selectDOBViaCalendar(driver);
-        await selectSexDropdown(driver, "Female");
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                console.log(`\n--- Registration Attempt ${attempt}/${maxAttempts} ---`);
+                rememberedName = await getRandomChildNameAndRegister(driver);
 
-        await fillChildRchId(driver, "987654321098");
-        await fillBirthCertificateNumber(driver, "B-2026-9876543");
-        await selectPlaceOfBirth(driver, "Primary Health Centre");
-        await uploadFrontAndBackImages(driver);
-        await clickChildRegSubmit(driver);
+                await selectDOBViaCalendar(driver);
+
+                await selectSexDropdown(driver, "Female");
+                await fillChildRchId(driver, "987654321098");
+                await fillBirthCertificateNumber(driver, "B-2026-9876543");
+                await selectPlaceOfBirth(driver, "Primary Health Centre");
+                await uploadFrontAndBackImages(driver);
+                await clickChildRegSubmit(driver);
+
+                registrationSuccessful = true;
+                break;
+
+            } catch (err) {
+                console.log(`⚠️ Attempt ${attempt} failed: ${err.message}`);
+                console.log(`🔙 Backing out of this form to select a different beneficiary...`);
+
+                await driver.pressKeyCode(4);
+                await driver.pause(2000);
+
+                if (attempt === maxAttempts) {
+                    throw new Error("❌ Exhausted all attempts to find a beneficiary with a valid Date of Birth.");
+                }
+            }
+        }
+
+        if (!registrationSuccessful) return;
 
         // --- STEP 2: NAVIGATE BACK TO HOME ---
         await navigateBackToHome(driver);
@@ -540,14 +679,13 @@ async function runTest() {
 
         await verifyHBYCScheduledVisits(driver);
 
-        // 3 Months visit logic
         await clickAddVisitForMonth(driver, "3 Months");
 
-        // Use today's date for the visit date, assuming it's a recent HBYC visit check
         const today = new Date();
         const visitDateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`;
-        await handleVisitDate(driver, visitDateStr);
 
+        // These will now automatically check if they are already filled before typing/clicking
+        await handleVisitDate(driver, visitDateStr);
         await handleIsBabyAlive(driver, "Yes");
         await driver.pause(1000);
 

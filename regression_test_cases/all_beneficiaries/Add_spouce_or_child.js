@@ -817,21 +817,22 @@ async function runSpouseRegistration(driver, regType = 'Register Wife') {
     }
 
     // ── "Do you have children?" — only for Married / Divorced / Separated / Widow ──
-    if (MARRIED_STATUSES.includes(maritalStatus)) {
+    // ── "Do you have children?" — only for WIFE (Married / Divorced / Separated / Widow) ──
+    if (isWife && MARRIED_STATUSES.includes(maritalStatus)) {
         await fillDoYouHaveChildren(driver);
     } else {
-        console.log(`\nℹ️ Marital status is "${maritalStatus}" — skipping "Do you have children?" field.`);
+        console.log(`\n   ℹ️ Skipping "Do you have children?" field (Husband registration or unmarried).`);
     }
 
-    // ── Status Of Women — only for Married/Divorced/Separated/Widow AND age < 50 ──
-    if (MARRIED_STATUSES.includes(maritalStatus) && spouseAge < 50) {
+    // ── Status Of Women — only for WIFE (Married/Divorced/Separated/Widow AND age < 50) ──
+    if (isWife && MARRIED_STATUSES.includes(maritalStatus) && spouseAge < 50) {
         const statusValue = randomItem(STATUS_OF_WOMEN_OPTIONS);
         console.log(`\n   Age is ${spouseAge} (<50) and status is "${maritalStatus}" → filling Status Of Women.`);
         await selectStatusOfWomen(driver, statusValue);
-    } else if (spouseAge >= 50) {
+    } else if (isWife && spouseAge >= 50) {
         console.log(`\n   ℹ️ Age is ${spouseAge} (≥50) → skipping Status Of Women.`);
     } else {
-        console.log(`\n   ℹ️ Marital status "${maritalStatus}" → skipping Status Of Women.`);
+        console.log(`\n   ℹ️ Skipping Status Of Women (Husband registration or unmarried).`);
     }
 
     // ── Optional Wife Name + Age of Marriage ──

@@ -6,10 +6,6 @@ const { selectVillage } = require("../../steps/villageSteps");
  * Helper to dynamically scroll down until an element by XPath becomes visible.
  * This is much more reliable than UiScrollable when targeting @hint attributes.
  */
-/**
- * Helper to dynamically scroll down until an element by XPath becomes visible.
- * This is much more reliable than UiScrollable when targeting @hint attributes.
- */
 async function scrollAndFind(driver, xpath, maxScrolls = 10) {
   let element = await driver.$(xpath);
 
@@ -68,6 +64,7 @@ async function scrollToTop(driver, swipes = 5) {
     await driver.pause(500);
   }
 }
+
 async function updateProfileFields(driver, profileData) {
   console.log("✍️ Modifying editable field inputs...");
 
@@ -124,17 +121,17 @@ async function main() {
     "Bank Account": "8538982420",
     "IFSC": "SBIN0004244",
     "Population Covered under ASHA": "3399",
-    "ASHA Supervisor Name": "Bobita Tanti",
+    "ASHA Supervisor Name": "BOBITA TANTI",
     "ASHA Supervisor Contact No.": "9876543210",
-    "CHO Name": "CHO Name",
+    "CHO Name": "CHO NAME",
     "Mobile No. of CHO": "9123456789",
-    "Name of AWW": "Raj",
+    "Name of AWW": "RAJ",
     "Mobile No. AWW": "7665563568",
-    "Name of ANM1": "Name of ANM1",
+    "Name of ANM1": "NAME OF ANM1",
     "Mobile Number of ANM1": "9988776644",
-    "Name of ANM2": "Name of ANM2",
+    "Name of ANM2": "NAME OF ANM2",
     "Mobile Number of ANM2": "9988776655",
-    "ABHA Number :": "ABHA Number :"
+    "ABHA Number :": "12345678901234"
   };
 
   try {

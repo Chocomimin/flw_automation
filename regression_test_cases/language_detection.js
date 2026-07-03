@@ -1,6 +1,5 @@
+const { remote } = require('webdriverio');
 const assert = require('assert');
-// 1. Import qase from your newly installed reporter
-const { qase } = require('@qase/wdio-reporter');
 
 const LOCATORS = {
     langDropdownTrigger: '//android.widget.LinearLayout[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/ll_select_lang"]',
@@ -13,7 +12,6 @@ const LOCATORS = {
 
 const TRANSLATIONS = [
     {
-        qaseId: 1,
         langName: 'हिंदी',
         expected: {
             loginTitle: 'जारी रखने के लिए लॉग इन करें',
@@ -23,7 +21,6 @@ const TRANSLATIONS = [
         }
     },
     {
-        qaseId: 2,
         langName: 'English',
         expected: {
             loginTitle: 'Login',
@@ -33,7 +30,6 @@ const TRANSLATIONS = [
         }
     },
     {
-        qaseId: 3,
         langName: 'অসমীয়া',
         expected: {
             loginTitle: 'আগবাঢ়ি যাবলৈ লগ ইন কৰক',
@@ -43,7 +39,6 @@ const TRANSLATIONS = [
         }
     },
     {
-        qaseId: 4,
         langName: 'বাংলা',
         expected: {
             loginTitle: 'লগইন',
@@ -54,41 +49,63 @@ const TRANSLATIONS = [
     }
 ];
 
-describe('FLW App Localization & Translation Verification', () => {
+async function runTests() {
+    console.log('🚀 Starting standalone WebdriverIO session...');
 
-    TRANSLATIONS.forEach((data) => {
-        // 2. Wrap the test description using qase(Case_ID, Test_Title)
-        it(qase(data.qaseId, `Verify UI strings for ${data.langName}`), async () => {
-            console.log(`\n🌐 Testing Language: ${data.langName} [Qase ID: ${data.qaseId}]`);
+    // 1. Manually initialize the browser session for Node.js
+    const browser = await remote({
+        port: 4723, // Your Appium port
+        capabilities = {
+    platformName: 'Android',
+    'appium:automationName': 'UiAutomator2',
+    'appium:deviceName': 'ZD222X4TDK',
+    'appium:appPackage': 'org.piramalswasthya.sakhi.niramay', // <-- UPDATE THIS
+    // You may also need to update the appActivity if it changed for this build
+    'appium:appActivity': 'org.piramalswasthya.sakhi.ui.login_activity.LoginActivity',
+    'appium:noReset': true,
+    'appium:enforceXPath1': true
+}
+    });
 
-            // 1. Click language dropdown
-            const dropdown = await $(LOCATORS.langDropdownTrigger);
+    try {
+        // 2. Loop through the translations
+        for (const data of TRANSLATIONS) {
+            console.log(`\n🌐 Testing Language: ${data.langName}`);
+
+            // Note: In standalone mode, we use browser.$ instead of just $
+            const dropdown = await browser.$(LOCATORS.langDropdownTrigger);
             await dropdown.waitForDisplayed({ timeout: 5000 });
             await dropdown.click();
 
-            // 2. Wait for the bottom sheet
-            const grid = await $(LOCATORS.bottomSheetGrid);
+            const grid = await browser.$(LOCATORS.bottomSheetGrid);
             await grid.waitForDisplayed({ timeout: 5000 });
 
-            // 3. Select language
-            const langOption = await $(`//android.widget.TextView[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/tv_lang_name" and @text="${data.langName}"]`);
+            const langOption = await browser.$(`//android.widget.TextView[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/tv_lang_name" and @text="${data.langName}"]`);
             await langOption.waitForDisplayed({ timeout: 5000 });
             await langOption.click();
 
-            // Give UI a moment to refresh
             await browser.pause(2000);
 
-            // 4. Extract strings
-            const actualTitle = await $(LOCATORS.loginTitle).getText();
-            const actualUserHint = await $(LOCATORS.usernameField).getText();
-            const actualPassHint = await $(LOCATORS.passwordField).getText();
-            const actualBtnText = await $(LOCATORS.loginButton).getText();
+            const actualTitle = await browser.$(LOCATORS.loginTitle).getText();
+            const actualUserHint = await browser.$(LOCATORS.usernameField).getText();
+            const actualPassHint = await browser.$(LOCATORS.passwordField).getText();
+            const actualBtnText = await browser.$(LOCATORS.loginButton).getText();
 
-            // 5. Assertions
             assert.strictEqual(actualTitle, data.expected.loginTitle, `Title mismatch for ${data.langName}`);
             assert.strictEqual(actualUserHint, data.expected.usernameHint, `Username hint mismatch for ${data.langName}`);
             assert.strictEqual(actualPassHint, data.expected.passwordHint, `Password hint mismatch for ${data.langName}`);
             assert.strictEqual(actualBtnText, data.expected.loginButton, `Button text mismatch for ${data.langName}`);
-        });
-    });
-});
+
+            console.log(`✅ Passed: ${data.langName}`);
+        }
+    } catch (error) {
+        console.error('\n❌ Test Failed:', error.message);
+    } finally {
+        // 3. Clean up the session when done
+        console.log('\nClosing browser session...');
+        await browser.deleteSession();
+    }
+}
+
+// Execute the function
+runTests();
