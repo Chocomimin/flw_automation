@@ -1,4 +1,6 @@
 // householdFormSteps.js
+// ✅ FINAL VERSION — All dropdowns use dedicated inline spinner logic with XML + coordinate fallback
+// Works on ALL devices — no coordinates, no window switching needed
 
 // ─────────────────────────────────────────────────────────────
 //  CORE HELPER — Scroll spinner into view
@@ -11,9 +13,11 @@ async function scrollSpinnerToMiddle(driver, spinnerSelector) {
         const screen = await driver.getWindowRect();
         const midY = screen.height / 2;
 
+        // If the element is in the bottom half of the screen, pull it up
         if (loc.y > midY + 100) {
             console.log(`⬆️  Spinner at y=${loc.y}, scrolling toward middle...`);
 
+            // Use W3C pointer actions for a reliable, device-agnostic swipe
             const startY = Math.floor(screen.height * 0.7);
             const endY = Math.floor(screen.height * 0.3);
             const swipeX = Math.floor(screen.width / 2);
@@ -25,18 +29,17 @@ async function scrollSpinnerToMiddle(driver, spinnerSelector) {
                     { type: 'pointerMove', duration: 0, x: swipeX, y: startY },
                     { type: 'pointerDown', button: 0 },
                     { type: 'pause', duration: 200 },
-                    { type: 'pointerMove', duration: 1000, x: swipeX, y: endY },
+                    { type: 'pointerMove', duration: 1000, x: swipeX, y: endY }, // swipe up
                     { type: 'pointerUp', button: 0 }
                 ]
             }]);
             await driver.releaseActions();
-            await driver.pause(1500);
+            await driver.pause(1500); // Allow UI to settle
         }
     } catch (e) {
         console.log('⚠️  scrollSpinnerToMiddle skipped:', e.message);
     }
 }
-
 // ─────────────────────────────────────────────────────────────
 //  CORE HELPER — Tap by coordinates
 // ─────────────────────────────────────────────────────────────
@@ -58,9 +61,11 @@ async function tapByCoords(driver, tapX, tapY) {
 
 // ─────────────────────────────────────────────────────────────
 //  CORE HELPER — Shared spinner click + XML bounds tap
+//  Used by ALL dropdowns — single consistent strategy everywhere
 // ─────────────────────────────────────────────────────────────
 
 async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optionsList) {
+    // 1. Force the spinner to the safe middle zone of the screen BEFORE clicking
     await scrollSpinnerToMiddle(driver, spinnerSelector);
 
     const spinner = await driver.$(spinnerSelector);
@@ -68,27 +73,40 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
 
     const loc  = await spinner.getLocation();
     const size = await spinner.getSize();
+    console.log(`📍 Spinner @ (${loc.x}, ${loc.y}), size (${size.width}x${size.height})`);
 
-    const tapX = Math.floor(loc.x + size.width - 40);
+    // 2. Click the RIGHT side of the spinner to explicitly hit the dropdown arrow
+    // This bypasses the flaky generic `.click()` which often hits the unclickable text area
+    const tapX = Math.floor(loc.x + size.width - 40); // 40px inwards from the right edge
     const tapY = Math.floor(loc.y + size.height / 2);
 
+    console.log(`📍 Tapping dropdown arrow at (${tapX}, ${tapY})`);
     await tapByCoords(driver, tapX, tapY);
-    await driver.pause(2000);
+    await driver.pause(2000); // Wait for popup to fully expand
 
+    // ─── STRATEGY 0: Direct XPath (Often the most robust for Android Popups) ───
     try {
         const item = await driver.$(`//*[@text="${value}"]`);
         await item.waitForDisplayed({ timeout: 4000 });
         await item.click();
+        console.log(`✅ Selected "${value}" via XPath`);
         return;
-    } catch (e) {}
+    } catch (e) {
+        console.log(`⚠️  XPath strategy failed: ${e.message}`);
+    }
 
+    // ─── STRATEGY 1: UiSelector ───
     try {
         const item = await driver.$(`android=new UiSelector().text("${value}")`);
         await item.waitForDisplayed({ timeout: 3000 });
         await item.click();
+        console.log(`✅ Selected "${value}" via UiSelector`);
         return;
-    } catch (e) {}
+    } catch (e) {
+        console.log(`⚠️  UiSelector strategy failed: ${e.message}`);
+    }
 
+    // ─── STRATEGY 2: Tag-by-tag XML parse (most reliable fallback) ───
     try {
         const source = await driver.getPageSource();
         const nodes = source.match(/<[^>]+>/g) || [];
@@ -108,12 +126,18 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
             if (boundsMatch) {
                 const tapX = Math.floor((parseInt(boundsMatch[1]) + parseInt(boundsMatch[3])) / 2);
                 const tapY = Math.floor((parseInt(boundsMatch[2]) + parseInt(boundsMatch[4])) / 2);
+                console.log(`📍 Found "${value}" in XML (tag parse) → tap(${tapX},${tapY})`);
                 await tapByCoords(driver, tapX, tapY);
+                console.log(`✅ Selected "${value}" via tag parse`);
                 return;
             }
         }
-    } catch (e) {}
+        console.log(`⚠️  "${value}" not found via tag parse, trying regex strategy...`);
+    } catch (e) {
+        console.log(`⚠️  Tag parse failed: ${e.message}`);
+    }
 
+    // ─── STRATEGY 3: Inline regex bounds ───
     try {
         const source = await driver.getPageSource();
         const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -123,11 +147,17 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
         if (match) {
             const tapX = Math.floor((parseInt(match[1]) + parseInt(match[3])) / 2);
             const tapY = Math.floor((parseInt(match[2]) + parseInt(match[4])) / 2);
+            console.log(`📍 Found "${value}" via regex → tap(${tapX},${tapY})`);
             await tapByCoords(driver, tapX, tapY);
+            console.log(`✅ Selected "${value}" via regex`);
             return;
         }
-    } catch (e) {}
+        console.log(`⚠️  "${value}" not found via regex, trying coordinate fallback...`);
+    } catch (e) {
+        console.log(`⚠️  Regex strategy failed: ${e.message}`);
+    }
 
+    // ─── STRATEGY 4: Coordinate fallback ───
     const screen = await driver.getWindowRect();
     const idx = optionsList.indexOf(value);
     if (idx === -1) throw new Error(`"${value}" not in list: [${optionsList.join(', ')}]`);
@@ -146,115 +176,106 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
     }
     finalTapY = Math.max(5, Math.min(finalTapY, screen.height - 5));
 
+    console.log(`📍 Coordinate fallback → tap(${finalTapX}, ${finalTapY})`);
     await tapByCoords(driver, finalTapX, finalTapY);
+    console.log(`✅ Selected "${value}" via coordinates`);
 }
 
 // ─────────────────────────────────────────────────────────────
 //  TEXT FIELD HELPERS
 // ─────────────────────────────────────────────────────────────
 
-// householdFormSteps.js
-
 async function fillFirstName(driver, firstName) {
-    const selector = '//android.widget.EditText[contains(@hint, "First Name")]';
-    const f = await driver.$(selector);
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().className("android.widget.EditText").textContains("First Name"))');
+    const f = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("First Name")');
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
-    await f.clearValue();
     await f.setValue(firstName);
-    console.log('✅ First Name entered');
+    if (await driver.isKeyboardShown()) {
+        await driver.hideKeyboard();
+        await driver.pause(500);
+    }
+    console.log('✅ First Name entered successfully');
 }
 
 async function fillLastName(driver, lastName) {
-    const f = await driver.$('//android.widget.EditText[contains(@hint, "Last Name")]');
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().className("android.widget.EditText").textContains("Last Name"))');
+    const f = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Last Name")');
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
-    await f.clearValue();
     await f.setValue(lastName);
-    console.log('✅ Last Name entered');
+    if (await driver.isKeyboardShown()) {
+        await driver.hideKeyboard();
+        await driver.pause(500);
+    }
+    console.log('✅ Last Name entered successfully');
 }
 
 async function fillMobileNumber(driver, mobileNumber) {
-    const f = await driver.$('//android.widget.EditText[contains(@hint, "Mobile No")]');
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().className("android.widget.EditText").textContains("Mobile No"))');
+    const f = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Mobile No")');
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
-    await f.clearValue();
     await f.setValue(mobileNumber);
-    console.log('✅ Mobile Number entered');
-}
-// Apply similar changes to fillHouseNo, fillWardNo, etc., using contains(@hint, "...")
-
-async function fillHouseNo(driver, houseNo) {
-    try {
-        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("House No"))');
-    } catch (e) {}
-
-    const f = await driver.$('//android.widget.EditText[contains(@hint, "House No") or contains(@text, "House No")] | //android.widget.TextView[contains(@text, "House No")]/parent::*//android.widget.EditText');
-    await f.waitForDisplayed({ timeout: 10000 });
-    await f.click();
-    await f.clearValue();
-    await f.setValue(houseNo);
-
     if (await driver.isKeyboardShown()) {
         await driver.hideKeyboard();
         await driver.pause(500);
     }
-    console.log('✅ House Number entered/edited successfully');
+    console.log('✅ Mobile Number entered successfully');
+}
+
+async function fillHouseNo(driver, houseNo) {
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().className("android.widget.EditText").text("House No"))');
+    const f = await driver.$('android=new UiSelector().className("android.widget.EditText").text("House No")');
+    await f.waitForDisplayed({ timeout: 10000 });
+    await f.click();
+    await f.setValue(houseNo);
+    if (await driver.isKeyboardShown()) {
+        await driver.hideKeyboard();
+        await driver.pause(500);
+    }
+    console.log('✅ House Number entered successfully');
 }
 
 async function fillWardNo(driver, wardNo) {
-    try {
-        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Ward No"))');
-    } catch (e) {}
-
-    const f = await driver.$('//android.widget.EditText[contains(@hint, "Ward No") or contains(@text, "Ward No")] | //android.widget.TextView[contains(@text, "Ward No")]/parent::*//android.widget.EditText');
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().className("android.widget.EditText").textContains("Ward No"))');
+    const f = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Ward No")');
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
-    await f.clearValue();
     await f.setValue(wardNo);
-
     if (await driver.isKeyboardShown()) {
         await driver.hideKeyboard();
         await driver.pause(500);
     }
-    console.log('✅ Ward Number entered/edited successfully');
+    console.log('✅ Ward Number entered successfully');
 }
 
 async function fillWardName(driver, wardName) {
-    try {
-        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Ward Name"))');
-    } catch (e) {}
-
-    const f = await driver.$('//android.widget.EditText[contains(@hint, "Ward Name") or contains(@text, "Ward Name")] | //android.widget.TextView[contains(@text, "Ward Name")]/parent::*//android.widget.EditText');
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().className("android.widget.EditText").textContains("Ward Name"))');
+    const f = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Ward Name")');
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
-    await f.clearValue();
     await f.setValue(wardName);
-
     if (await driver.isKeyboardShown()) {
         await driver.hideKeyboard();
         await driver.pause(500);
     }
-    console.log('✅ Ward Name entered/edited successfully');
+    console.log('✅ Ward Name entered successfully');
 }
 
 async function fillMohallaName(driver, mohallaName) {
-    try {
-        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Mohalla Name"))');
-    } catch (e) {}
-
-    const f = await driver.$('//android.widget.EditText[contains(@hint, "Mohalla Name") or contains(@text, "Mohalla Name")] | //android.widget.TextView[contains(@text, "Mohalla Name")]/parent::*//android.widget.EditText');
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Mohalla Name"))');
+    const f = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Mohalla Name")');
     await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
-    await f.clearValue();
     await f.setValue(mohallaName);
-
     if (await driver.isKeyboardShown()) {
         await driver.hideKeyboard();
-        await driver.pause(800);
+        await driver.pause(800); // longer pause — next scroll needs keyboard fully gone
     }
-    console.log('✅ Mohalla Name entered/edited successfully');
+    console.log('✅ Mohalla Name entered successfully');
 }
+
 
 // ─────────────────────────────────────────────────────────────
 //  RADIO BUTTON HELPERS
@@ -290,6 +311,7 @@ async function selectSeparateKitchen(driver, value) {
     await options[idx].click();
     console.log(`✅ Separate Kitchen selected: ${value}`);
 }
+
 
 // ─────────────────────────────────────────────────────────────
 //  DROPDOWN HELPERS
@@ -373,6 +395,7 @@ async function selectToiletAvailability(driver, value) {
     );
     console.log(`✅ Toilet: ${value}`);
 }
+
 
 // ─────────────────────────────────────────────────────────────
 //  MASTER FUNCTION

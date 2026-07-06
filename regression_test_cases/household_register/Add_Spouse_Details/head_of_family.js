@@ -249,32 +249,20 @@ async function navigateCalendarToMonth(driver, targetMonth, targetYear) {
         await driver.pause(1000);
 
         let yearFound = false;
+        const yearXpath = `//android.widget.TextView[@text="${targetYear}"]`;
 
-        // 🔴 FIX 1: Swap XPath for a much faster native UiSelector.
-        // XPath forces UiAutomator to dump the entire XML tree on every loop, causing crashes.
-        const yearSelector = `android=new UiSelector().className("android.widget.TextView").text("${targetYear}")`;
-
-        // If target is older (e.g., 1985 < 2026), swipe 'down' to reveal top of list
+        // If target is older (e.g., 1990 < 2011), swipe 'down' to reveal top of list
         const swipeDir = targetYear < currentYear ? 'down' : 'up';
 
         for (let i = 0; i < 40; i++) {
-            const yearEl = await driver.$(yearSelector);
-
-            // Safe-check if the element exists in the DOM before checking visibility
-            if (await yearEl.isExisting()) {
-                if (await yearEl.isDisplayed().catch(() => false)) {
-                    yearFound = true;
-                    await yearEl.click();
-                    break;
-                }
+            const yearEl = await driver.$(yearXpath);
+            if (await yearEl.isDisplayed().catch(() => false)) {
+                yearFound = true;
+                await yearEl.click();
+                break;
             }
-
             console.log(`   🔄 Scrolling ${swipeDir} to find year ${targetYear}...`);
             await swipeVerticalInsidePopup(driver, swipeDir);
-
-            // 🔴 FIX 2: Crucial stabilization pause.
-            // Wait for the scrolling inertia/animation to completely stop before the next loop queries the DOM.
-            await driver.pause(1200);
         }
 
         if (!yearFound) {
@@ -284,6 +272,18 @@ async function navigateCalendarToMonth(driver, targetMonth, targetYear) {
     }
 
     // 2. Select the Month
+    //
+    // ROOT CAUSE OF CRASHES: calling element.click() on android:id/prev or android:id/next
+    // while UiAutomator2 has active element references causes the instrumentation to die.
+    // Similarly, querying month_view child elements right after a navigation click races
+    // with the ViewPager animation and also crashes it.
+    //
+    // SAFE APPROACH:
+    //   a) Resolve button coordinates ONCE from page source (no live element refs in the loop).
+    //   b) Read the current month by parsing page source text (no element queries mid-loop).
+    //   c) Tap by coordinates — bypasses the accessibility layer entirely.
+    //   d) Wait 1.2s after each tap for the ViewPager animation to finish before next read.
+
     async function getNavButtonCoords(drv) {
         const src = await drv.getPageSource();
         const prevMatch = src.match(/resource-id="android:id\/prev"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/)
@@ -334,25 +334,46 @@ async function navigateCalendarToMonth(driver, targetMonth, targetYear) {
                 console.log(`   ▶ Tapping Next (${navCoords.next.x},${navCoords.next.y}) — ${MONTH_NAMES[cur.month]} ${cur.year}`);
                 await tapByCoords(driver, navCoords.next.x, navCoords.next.y);
             }
+            // Wait for ViewPager animation before next page source read
             await driver.pause(1200);
             navCoords = await getNavButtonCoords(driver) || navCoords;
         }
     }
 }
 async function handleConsentForm(driver) {
+    // Locators based on the actual Consent Form XML:
+    //   checkBox      -> android.widget.CheckBox   (id: checkBox)
+    //   AGREE button  -> android.widget.Button      (id: btn_positive)
+    //   DISAGREE btn  -> android.widget.Button      (id: btn_negative)
+    //   body text     -> android.widget.TextView    (id: scrollableText)
     console.log("⏳ Waiting for Consent Form popup...");
     try {
-        const agreeBtn = await driver.$('android=new UiSelector().textMatches("(?i)agree")');
+        // PRIMARY: resource-id based locator (most reliable, tied to the real screen)
+        let agreeBtn = await driver.$(
+            'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_positive")'
+        );
+
+        // FALLBACK: text based locator, in case the resource-id changes across builds
+        if (!(await agreeBtn.isExisting())) {
+            agreeBtn = await driver.$('android=new UiSelector().textMatches("(?i)agree")');
+        }
+
         await agreeBtn.waitForDisplayed({ timeout: 15000 });
         console.log("✅ Consent popup is visible");
         await driver.pause(1000);
 
-        const checkbox = await driver.$('android=new UiSelector().className("android.widget.CheckBox")');
+        let checkbox = await driver.$(
+            'android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/checkBox")'
+        );
+        if (!(await checkbox.isExisting())) {
+            checkbox = await driver.$('android=new UiSelector().className("android.widget.CheckBox")');
+        }
+
         if (await checkbox.isExisting()) {
             await checkbox.click();
             console.log("✅ Clicked the Consent Checkbox");
         } else {
-            console.log("⚠️ Checkbox class not found, clicking the text body instead...");
+            console.log("⚠️ Checkbox not found, clicking the text body instead...");
             const consentText = await driver.$('android=new UiSelector().textContains("I have been explained")');
             await consentText.click();
             console.log("✅ Clicked the text body to check the box");
@@ -475,70 +496,60 @@ async function selectMaritalStatus(driver, value = "Married") {
     console.log(`✅ Marital Status: ${value}`);
 }
 
-
+// ─────────────────────────────────────────────────────────────
+//  5. Text Field Helpers
+// ─────────────────────────────────────────────────────────────
 
 async function fillFatherName(driver, fatherName) {
     if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
-
-    // Scroll until the field is in view
-    try { await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Father\'s Name"))'); } catch (e) {}
-
-    // 🔴 FIX: Use XPath targeting the @hint attribute
-    const f = await driver.$('//android.widget.EditText[contains(@hint, "Father\'s Name")]');
-    await f.waitForDisplayed({ timeout: 10000 });
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Father\'s Name"))');
+    const f = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Father\'s Name")');
     await f.click();
     await f.setValue(fatherName);
-
     if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
     console.log(`✅ Father's Name entered: ${fatherName}`);
 }
 
 async function fillMotherName(driver, motherName) {
     if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
-
-    // Scroll until the field is in view
-    try { await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Mother\'s Name"))'); } catch (e) {}
-
-    // 🔴 FIX: Use XPath targeting the @hint attribute
-    const f = await driver.$('//android.widget.EditText[contains(@hint, "Mother\'s Name")]');
-    await f.waitForDisplayed({ timeout: 10000 });
+    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Mother\'s Name"))');
+    const f = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Mother\'s Name")');
     await f.click();
     await f.setValue(motherName);
-
     if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
     console.log(`✅ Mother's Name entered: ${motherName}`);
 }
 
-async function fillSpouseNameIfExists(driver, spouseName, gender) {
-    const targetText = gender === "Male" ? "Wife" : "Husband";
-    console.log(`🔍 Checking if '${targetText}' field is present...`);
-
-    if (await driver.isKeyboardShown()) {
-        await driver.hideKeyboard();
-        await driver.pause(1000);
-    }
+async function fillSpouseNameIfExists(driver, spouseName) {
+    console.log("🔍 Checking if Husband's or Wife's Name field is present...");
+    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
 
     try {
-        await driver.$(`android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("${targetText}"))`);
-        await driver.pause(500);
-    } catch (e) {
-        console.log(`ℹ️ Could not scroll exactly to "${targetText}". It might be missing or already visible.`);
+        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollForward()');
+    } catch (e) {}
+
+    const wifeField    = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Wife\'s Name")');
+    const husbandField = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Husband\'s Name")');
+
+    let fieldToFill = null;
+    let fieldNameStr = "";
+
+    if (await wifeField.isExisting()) {
+        fieldToFill = wifeField;
+        fieldNameStr = "Wife's Name";
+    } else if (await husbandField.isExisting()) {
+        fieldToFill = husbandField;
+        fieldNameStr = "Husband's Name";
     }
 
-    // 🔴 FIX: Use XPath targeting the @hint attribute to prevent Stale Element Exception
-    const spouseField = await driver.$(`//android.widget.EditText[contains(@hint, "${targetText}")]`);
-
-    if (await spouseField.isExisting()) {
-        console.log(`✅ Found ${targetText} field. Filling it...`);
-        await spouseField.click();
-        await spouseField.setValue(spouseName.toUpperCase());
-        if (await driver.isKeyboardShown()) {
-            await driver.hideKeyboard();
-            await driver.pause(1000);
-        }
-        console.log(`✅ ${targetText} Name entered: ${spouseName.toUpperCase()}`);
+    if (fieldToFill) {
+        console.log(`✅ Found ${fieldNameStr} field. Filling it...`);
+        await fieldToFill.click();
+        await fieldToFill.setValue(spouseName.toUpperCase());
+        if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
+        console.log(`✅ ${fieldNameStr} entered: ${spouseName.toUpperCase()}`);
     } else {
-        console.log(`⏭️ ${targetText} Name field not present. Moving next.`);
+        console.log("⏭️ Neither Husband's nor Wife's Name field is present. Moving next.");
     }
 }
 
@@ -546,8 +557,7 @@ async function fillAgeAtMarriageIfExists(driver, ageAtMarriage) {
     console.log("🔍 Checking if Age At Marriage field is present...");
     if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
 
-    // 🔴 FIX: Use XPath targeting the @hint attribute
-    const ageMarriageField = await driver.$('//android.widget.EditText[contains(@hint, "Age at the time of marriage")]');
+    const ageMarriageField = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Age at the time of marriage")');
 
     if (await ageMarriageField.isExisting()) {
         console.log("✅ Found Age At Marriage field. Filling it...");
@@ -639,8 +649,7 @@ async function fillRchIdIfExists(driver, rchId) {
         await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollForward()');
     } catch (e) {}
 
-    // 🔴 FIX: Use XPath targeting the @hint attribute
-    const rchField = await driver.$('//android.widget.EditText[contains(@hint, "RCH ID")]');
+    const rchField = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("RCH ID")');
 
     if (await rchField.isExisting()) {
         console.log("✅ Found RCH ID field. Filling it...");
@@ -767,9 +776,8 @@ async function fillHeadOfFamilyFormWithExamples(driver, targetMaritalStatus = "M
     await fillMotherName(driver, "Meera Kumari");
 
     // ✅ Dynamically provides a Wife or Husband name based on the gender profile
-    // ✅ Dynamically provides a Wife or Husband name based on the gender profile
     const spouseName = gender === "Male" ? "Sita Kumari" : "Krupal Singh";
-    await fillSpouseNameIfExists(driver, spouseName, gender);
+    await fillSpouseNameIfExists(driver, spouseName);
 
     await fillAgeAtMarriageIfExists(driver, "24");
 

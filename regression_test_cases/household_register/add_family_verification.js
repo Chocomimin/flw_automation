@@ -1,5 +1,14 @@
 const { remote } = require('webdriverio');
-const { formRegistration } = require("./familyForm");
+const {
+    formRegistration,
+    REG_DATA,
+    randomizeRegData,
+    RELATION_OPTIONS_FEMALE,
+    RELATION_OPTIONS_MALE,
+    RELATION_OPTIONS_TRANSGENDER
+} = require("./add_family/add_family_form.js");
+
+
 
 const capabilities = {
     platformName: 'Android',
@@ -162,11 +171,55 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
     const idx = optionsList.indexOf(value);
     if (idx === -1) throw new Error(`"${value}" not in list: [${optionsList.join(', ')}]`);
 
+    // Strategy 5: derive the tap position from the ACTUAL rendered row
+    // bounds instead of a hardcoded row-height formula. The 'actv_rth'
+    // dropdown doesn't expose item text to any accessibility query (every
+    // text-based strategy above fails even for items that do exist), so a
+    // fixed "baseY + idx * rowHeight" formula silently drifts by a row
+    // whenever the real spacing isn't perfectly uniform — which is exactly
+    // how "Grand Mother" once selected "Daughter", and now "Daughter in
+    // Law" selects "Grand Daughter". Reading real row bounds and tapping
+    // the idx-th one sidesteps that guesswork entirely.
+    if (spinnerSelector.includes('actv_rth')) {
+        try {
+            const source = await driver.getPageSource();
+            const boundsRegex = /bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/g;
+            const candidates = [];
+            let m;
+            while ((m = boundsRegex.exec(source)) !== null) {
+                const x1 = parseInt(m[1]), y1 = parseInt(m[2]), x2 = parseInt(m[3]), y2 = parseInt(m[4]);
+                const width = x2 - x1, height = y2 - y1;
+                // Dropdown list rows are wide, shallow bands (~100px tall,
+                // spanning most of the dialog width) — filter to just those.
+                if (width > 400 && width < 1080 && height > 60 && height < 140) {
+                    candidates.push({ y1, cx: Math.floor((x1 + x2) / 2), cy: Math.floor((y1 + y2) / 2) });
+                }
+            }
+            candidates.sort((a, b) => a.y1 - b.y1);
+            // Dedupe nested/overlapping bounds that describe the same row.
+            const rows = [];
+            for (const c of candidates) {
+                if (!rows.some(r => Math.abs(r.y1 - c.y1) < 20)) rows.push(c);
+            }
+            if (rows.length >= optionsList.length && rows[idx]) {
+                const { cx, cy } = rows[idx];
+                console.log(`📍 Positional fallback (row ${idx} of ${rows.length} detected rows) → tap(${cx}, ${cy})`);
+                await tapByCoords(driver, cx, cy);
+                console.log(`✅ Selected "${value}" via positional row match`);
+                return;
+            }
+            console.log(`⚠️ Positional fallback found ${rows.length} rows, expected ${optionsList.length} — falling back to fixed formula.`);
+        } catch (e) {}
+    }
+
     let finalTapX, finalTapY;
 
     if (spinnerSelector.includes('actv_rth')) {
         finalTapX = 539;
-        if (optionsList.includes('Mother')) {
+        if (optionsList === RELATION_OPTIONS_TRANSGENDER) {
+            // 9-item list, "Brother" (idx 0) centers at y≈506 per the Transgender UI dump
+            finalTapY = 506 + (idx * 102);
+        } else if (optionsList.includes('Mother')) {
             finalTapY = 302 + (idx * 102);
         } else {
             finalTapY = 404 + (idx * 102);
@@ -216,18 +269,20 @@ async function selectGender(driver, genderInput) {
     console.log(`✅ Gender → "${genderInput}"`);
 }
 
-const RELATION_OPTIONS_FEMALE = ['Mother', 'Sister', 'Wife', 'Niece', 'Daughter', 'Grand Mother', 'Mother in Law', 'Grand Daughter', 'Daughter in Law', 'Sister in Law', 'Other'];
-const RELATION_OPTIONS_MALE = ['Father', 'Brother', 'Husband', 'Nephew', 'Son', 'Grand Father', 'Father in Law', 'Grand Son', 'Son in Law', 'Other'];
-
 async function selectRelationWithHof(driver, relation, gender = 'female') {
     const key = gender.toLowerCase();
-    const formatted = relation.replace(/\w\S*/g,
-        w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
-    );
+    // Rule: use the relation string exactly as given — it already comes
+    // straight from RELATION_OPTIONS_FEMALE/MALE/TRANSGENDER, matching the
+    // on-screen text verbatim (e.g. "Daughter in Law", "Mother in Law").
+    // Blindly title-casing every word here previously turned "in"/"of" into
+    // "In"/"Of", which broke lookups for any multi-word relation.
+    const formatted = relation;
 
     let optionsList = RELATION_OPTIONS_FEMALE;
     if (key === 'male') {
         optionsList = RELATION_OPTIONS_MALE;
+    } else if (key === 'transgender' || key === 'trans') {
+        optionsList = RELATION_OPTIONS_TRANSGENDER;
     }
 
     console.log(`⏳ Opening Relation dropdown for "${formatted}"...`);
@@ -326,30 +381,82 @@ async function clickDashboardCard(driver, cardText) {
     console.log(`✅ Clicked card: "${cardText.replace('\n', ' ')}"`);
 }
 
-async function searchAndAddMember(driver, searchName) {
+async function clickRandomAddMember(driver) {
+    console.log('⏳ Selecting a random household to click "Add Member" on...');
+    await driver.pause(1000);
+
+    // Make sure at least a few cards are loaded/visible before we look.
+    await scrollToText(driver, 'Add Member');
+
+    let addButtons = await driver.$$('//android.widget.Button[@text="Add Member"]');
+
+    // If nothing is visible yet, try a couple more scrolls.
+    let attempts = 0;
+    while (addButtons.length === 0 && attempts < 3) {
+        await scrollToText(driver, 'Add Member');
+        addButtons = await driver.$$('//android.widget.Button[@text="Add Member"]');
+        attempts++;
+    }
+
+    if (addButtons.length === 0) {
+        throw new Error('No "Add Member" buttons found on the household list.');
+    }
+
+    const randomIndex = Math.floor(Math.random() * addButtons.length);
+    const chosenBtn = addButtons[randomIndex];
+
+    await chosenBtn.waitForDisplayed({ timeout: 5000 });
+    await chosenBtn.click();
+    console.log(`✅ Clicked "Add Member" (random pick ${randomIndex + 1} of ${addButtons.length})`);
+
+    await driver.pause(2500);
+}
+
+async function searchInBeneficiaryList(driver, searchName) {
+    console.log(`⏳ Navigating to All Beneficiaries to verify "${searchName}"...`);
+
+    // Go back to the Home dashboard first (may already be there after submit).
+    try {
+        const homeBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/toolbar_menu_home")');
+        if (await homeBtn.isExisting()) {
+            await homeBtn.click();
+            await driver.pause(1500);
+        }
+    } catch (e) {}
+
+    await clickDashboardCard(driver, 'All\nBeneficiaries');
+    await driver.pause(1500);
+
     const searchBar = await driver.$(
         '//android.widget.EditText[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/searchView"]'
     );
     await searchBar.waitForDisplayed({ timeout: 10000 });
 
-    // CHANGED: Use setValue() instead of clicking and sending array keys
-    await searchBar.setValue(searchName);
+    // 1. Click the field to gain focus
+    await searchBar.click();
+    try { await searchBar.clearValue(); } catch (e) {}
+    await driver.pause(500);
+
+    console.log(`⏳ Typing search term: "${searchName}"...`);
+
+    // 2. Simulate actual keystrokes so the app's search filter triggers
+    await driver.keys([...searchName]);
 
     if (await driver.isKeyboardShown()) await driver.hideKeyboard();
+
+    // Give the app's search function a moment to filter the list
     await driver.pause(2000);
 
-    const formattedName = searchName.toUpperCase();
-    const addBtn = await driver.$(
-        `//android.widget.TextView[@text="${formattedName}"]` +
-        `/ancestor::android.widget.FrameLayout` +
-        `[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/parentCard"]` +
-        `//android.widget.Button[@text="Add Member"]`
-    );
-    await addBtn.waitForDisplayed({ timeout: 10000 });
-    await addBtn.click();
-    console.log(`✅ Clicked "Add Member" for ${formattedName}`);
-
-    await driver.pause(2500);
+    const formattedName = searchName.trim().toUpperCase();
+    try {
+        const resultCard = await driver.$(`//android.widget.TextView[contains(@text,"${formattedName}")]`);
+        await resultCard.waitForDisplayed({ timeout: 5000 });
+        console.log(`✅ Verified: "${formattedName}" found in the Beneficiary list.`);
+        return true;
+    } catch (e) {
+        console.log(`❌ "${formattedName}" was NOT found in the Beneficiary list.`);
+        return false;
+    }
 }
 
 async function runTest(externalDriver = null) {
@@ -357,11 +464,12 @@ async function runTest(externalDriver = null) {
     const isStandalone = !externalDriver;
     const driver = externalDriver || await remote({ path: '/', port: 4723, capabilities });
 
-    const TEST = {
-        searchName   : 'ASHOK MEHTA',
-        gender       : 'Female',
-        relation     : 'Husband',
-    };
+    // Rule: Gender, Relation with Head of Family, First/Last Name,
+    // Father's/Mother's Name and Husband's/Wife's Name are all randomized
+    // for every run. randomizeRegData() writes the name fields onto
+    // REG_DATA (consumed later by formRegistration) and returns the
+    // gender/relation pair needed to drive the "Add Member" dialog below.
+    const TEST = randomizeRegData();
 
     try {
         console.log('🚀 Starting add member test...');
@@ -369,8 +477,8 @@ async function runTest(externalDriver = null) {
         // 1. Open household list
         await clickDashboardCard(driver, 'All\nHousehold');
 
-        // 2. Search and open Add Member dialog
-        await searchAndAddMember(driver, TEST.searchName);
+        // 2. Click "Add Member" on a random household (no search)
+        await clickRandomAddMember(driver);
 
         // 3. Interact with dialog using Native Elements for static buttons, Robust List for dropdown
         await selectGender(driver, TEST.gender);
@@ -382,8 +490,24 @@ async function runTest(externalDriver = null) {
         await clickOkButton(driver);
         await driver.pause(2500);
 
-        // 4. Handoff to Family Form
+        // 4. Handoff to Family Form (fills form, verifies gender-specific
+        //    fields, verifies mandatory-field validation, submits)
         await formRegistration(driver);
+
+        // 5. Step 11 — Search the newly added family member in the beneficiary list.
+        // Rule: the test case is only considered complete once the newly
+        // registered member is confirmed to exist in "All Beneficiaries" —
+        // finding them there is the pass/fail signal for the whole run.
+        const newMemberName = `${REG_DATA.firstName || ''} ${REG_DATA.lastName || ''}`.trim();
+        if (newMemberName) {
+            const found = await searchInBeneficiaryList(driver, newMemberName);
+            if (!found) {
+                throw new Error(`Registration verification failed: "${newMemberName}" was not found in All Beneficiaries after submit.`);
+            }
+            console.log('🎉 Test case completed successfully — beneficiary found in All Beneficiaries.');
+        } else {
+            console.log('⏭️ Skipping beneficiary-list search: First/Last name were not provided.');
+        }
 
     } catch (err) {
         console.error('❌ Test failed:', err);

@@ -490,13 +490,18 @@ async function fillFatherName(driver, fatherName) {
     console.log(`✅ Father's Name entered: ${fatherName}`);
 }
 
+// headOfFamilySteps.js
+
 async function fillMotherName(driver, motherName) {
-    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
-    await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().textContains("Mother\'s Name"))');
-    const f = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Mother\'s Name")');
+    // 🔴 FIX: Do NOT use .textContains(). Use contains(@hint, ...)
+    const f = await driver.$('//android.widget.EditText[contains(@hint, "Mother\'s Name")]');
+
+    await f.waitForDisplayed({ timeout: 10000 });
     await f.click();
+    await f.clearValue(); // Now safe because the selector is based on @hint
     await f.setValue(motherName);
-    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
+
+    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); }
     console.log(`✅ Mother's Name entered: ${motherName}`);
 }
 
@@ -504,10 +509,20 @@ async function fillSpouseNameIfExists(driver, spouseName) {
     console.log("🔍 Checking if Husband's or Wife's Name field is present...");
     if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
 
-    // Scroll forward slightly to ensure the fields are in view
-    try {
-        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollForward()');
-    } catch (e) {}
+    // ✅ FIX: only scroll if the field isn't already on screen. Scrolling
+    // unconditionally here was pushing an already-visible field into a
+    // mid-fling/settling position, so the click right after could land
+    // before the EditText actually had focus — clearValue/setValue would
+    // then silently write into nothing while the field never got the text.
+    const wifeCheck = await driver.$('//android.widget.EditText[contains(@hint, "Wife") or contains(@text, "Wife")]');
+    const alreadyVisible = await wifeCheck.isExisting() && await wifeCheck.isDisplayed().catch(() => false);
+
+    if (!alreadyVisible) {
+        try {
+            await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollForward()');
+            await driver.pause(500);
+        } catch (e) {}
+    }
 
     // ✅ FIX: Use XPath to check both @hint and @text, avoiding apostrophe matching issues
     const wifeField    = await driver.$('//android.widget.EditText[contains(@hint, "Wife") or contains(@text, "Wife")]');
@@ -526,16 +541,27 @@ async function fillSpouseNameIfExists(driver, spouseName) {
 
     if (fieldToFill) {
         console.log(`✅ Found ${fieldNameStr} field. Filling it...`);
+        const expected = spouseName.toUpperCase();
 
-        // Ensure the element is fully in view before clicking
-        await fieldToFill.click();
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            await fieldToFill.click();
+            await driver.pause(300); // let focus land before clearing/typing
 
-        // Clear any existing value (optional but safe) before setting the new one
-        await fieldToFill.clearValue();
-        await fieldToFill.setValue(spouseName.toUpperCase());
+            // Clear any existing value (optional but safe) before setting the new one
+            await fieldToFill.clearValue();
+            await fieldToFill.setValue(expected);
+            await driver.pause(300);
 
-        if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
-        console.log(`✅ ${fieldNameStr} entered: ${spouseName.toUpperCase()}`);
+            const actual = await fieldToFill.getText().catch(() => "");
+            if (actual && actual.toUpperCase() === expected) {
+                if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
+                console.log(`✅ ${fieldNameStr} entered: ${expected}`);
+                return;
+            }
+            console.log(`⚠️ ${fieldNameStr} shows "${actual}" after attempt ${attempt}, expected "${expected}".`);
+        }
+
+        console.log(`🚨 VALIDATION CONCERN: Could not confirm ${fieldNameStr} was set to "${expected}" after 2 attempts.`);
     } else {
         console.log("⏭️ Neither Husband's nor Wife's Name field is present. Moving next.");
     }
@@ -555,6 +581,71 @@ async function fillAgeAtMarriageIfExists(driver, ageAtMarriage) {
         console.log(`✅ Age At Marriage entered: ${ageAtMarriage}`);
     } else {
         console.log("⏭️ Age At Marriage field not present. Moving next.");
+    }
+}
+
+async function fillDateOfMarriageIfExists(driver, dateObj) {
+    console.log("🔍 Checking if 'Date of Marriage' field is present...");
+    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
+
+    try {
+        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().className("android.widget.EditText").textContains("Date of Marriage"))');
+        await driver.pause(500);
+    } catch (e) {}
+
+    const marriageDateField = await driver.$('//android.widget.EditText[contains(@text,"Date of Marriage") or contains(@hint,"Date of Marriage")]');
+
+    if (!(await marriageDateField.isExisting())) {
+        console.log("⏭️ 'Date of Marriage' field not present. Moving next.");
+        return;
+    }
+
+    console.log("✅ Found 'Date of Marriage' field. Opening picker...");
+    // Falls back to a sensible default (matches fillAgeAtMarriageIfExists' own
+    // default) if the caller doesn't pass an explicit date object.
+    const { day, month, year } = dateObj || { day: 15, month: 3, year: 2017 };
+
+    await marriageDateField.click();
+    await navigateCalendarToMonth(driver, month, year);
+    await driver.pause(500);
+
+    const paddedDay  = String(day).padStart(2, '0');
+    const monthName  = MONTH_NAMES[month];
+    const targetDesc = `${paddedDay} ${monthName} ${year}`;
+
+    console.log(`👆 Locating calendar day cell match: "${targetDesc}"`);
+    const dayCell = await driver.$(`//android.view.View[@content-desc="${targetDesc}"]`);
+    await dayCell.waitForDisplayed({ timeout: 5000 });
+    await dayCell.click();
+    await driver.pause(500);
+
+    const okXpath = '//*[@text="OK" or @resource-id="android:id/button1"]';
+    const okBtn = await driver.$(okXpath);
+    await okBtn.waitForDisplayed({ timeout: 5000 });
+    await okBtn.click();
+    await driver.pause(1500);
+    console.log(`✅ Date of Marriage set to: ${targetDesc}`);
+}
+
+async function fillContactNumberIfExists(driver, contactNumber) {
+    console.log("🔍 Checking if beneficiary 'Contact Number' field is present...");
+    if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
+
+    try {
+        await driver.$('android=new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().className("android.widget.EditText").textContains("Contact Number"))');
+    } catch (e) {}
+
+    const contactField = await driver.$('android=new UiSelector().className("android.widget.EditText").textContains("Contact Number")');
+
+    if (await contactField.isExisting()) {
+        console.log("✅ Found 'Contact Number' field. Filling it...");
+        await contactField.click();
+        await contactField.clearValue();
+        await contactField.setValue(contactNumber);
+        if (await driver.isKeyboardShown()) { await driver.hideKeyboard(); await driver.pause(1000); }
+        console.log(`✅ Contact Number entered: ${contactNumber}`);
+    } else {
+        console.log("⏭️ 'Contact Number' field not present. Moving next.");
     }
 }
 
@@ -774,11 +865,14 @@ async function fillHeadOfFamilyFormWithExamples(driver, targetMaritalStatus = "M
     await fillSpouseNameIfExists(driver, spouseName);
 
     await fillAgeAtMarriageIfExists(driver, ageAtMarriage);
+    await fillDateOfMarriageIfExists(driver, identity.dateOfMarriage);
 
     // ✅ Bypasses 'Children' column for Male beneficiaries
     if (gender === "Female") {
         await selectHaveChildrenIfExists(driver, "Yes");
     }
+
+    await fillContactNumberIfExists(driver, identity.mobileNumber || "9876543210");
 
     await selectCommunity(driver, "OBC");
     await selectReligion(driver, "Christian");
@@ -817,6 +911,8 @@ module.exports = {
   fillMotherName,
   fillSpouseNameIfExists,
   fillAgeAtMarriageIfExists,
+  fillDateOfMarriageIfExists,
+  fillContactNumberIfExists,
   selectHaveChildrenIfExists,
   selectCommunity,
   selectReligion,

@@ -1,0 +1,6 @@
+module.exports = {
+    LANGUAGE_VALIDATION: 1334,
+    USER_PROFILE_UPDATE: 1335,
+    LOGIN_VALID: 247,
+    LOGIN_INVALID: 248
+};

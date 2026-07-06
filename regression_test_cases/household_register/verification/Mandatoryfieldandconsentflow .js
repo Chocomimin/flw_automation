@@ -50,6 +50,8 @@ const {
   fillMotherName,
   fillSpouseNameIfExists,
   fillAgeAtMarriageIfExists,
+  fillDateOfMarriageIfExists,
+  fillContactNumberIfExists,
   selectHaveChildrenIfExists,
   selectCommunity,
   selectReligion,
@@ -96,9 +98,28 @@ async function registerBeneficiary(driver, gender, identity, consentChoice = "Ag
   await fillSpouseNameIfExists(driver, identity.spouseName);
   await fillAgeAtMarriageIfExists(driver, identity.ageAtMarriage);
 
+  // ⚠️ Date of Marriage must agree with DOB + Age at Marriage, or the app's
+  // own validation (or a human reviewer) will catch the mismatch — e.g. a
+  // 1990 DOB with age-at-marriage 22 has to land on a 2012 marriage date,
+  // not some unrelated default. Derive it instead of guessing.
+  const ageAtMarriageNum = parseInt(identity.ageAtMarriage, 10);
+  const dateOfMarriage = identity.dateOfMarriage || (
+    Number.isFinite(ageAtMarriageNum)
+      ? { day: dob.day, month: dob.month, year: dob.year + ageAtMarriageNum }
+      : undefined
+  );
+  await fillDateOfMarriageIfExists(driver, dateOfMarriage);
+
+  // ⚠️ On-screen order for a married beneficiary is:
+  //   Age at marriage → Date of Marriage → Do you have children? → Contact Number
+  // "Do you have children?" only appears for Female beneficiaries; both
+  // helpers below are still safe to call for Male since they no-op if the
+  // field isn't present.
   if (gender === "Female") {
     await selectHaveChildrenIfExists(driver, "Yes");
   }
+
+  await fillContactNumberIfExists(driver, identity.mobileNumber);
 
   await selectCommunity(driver, "OBC");
   await selectReligion(driver, "Christian");

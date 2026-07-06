@@ -194,9 +194,30 @@ async function clickSpinnerAndSelectOption(driver, spinnerSelector, value, optio
 
 
 // ─────────────────────────────────────────────────────────────
-//  DIALOG INTERACTION
+//  CLICK RANDOM ADD MEMBER (NO SEARCH)
 // ─────────────────────────────────────────────────────────────
+async function clickRandomAddMember(driver) {
+    console.log(`⏳ Searching for visible 'Add Member' buttons...`);
 
+    // Find all buttons on the screen that have the text "Add Member"
+    const addMemberButtons = await driver.$$('//android.widget.Button[@text="Add Member"]');
+
+    if (addMemberButtons.length === 0) {
+        throw new Error("❌ No 'Add Member' buttons found on the current screen.");
+    }
+
+    console.log(`✅ Found ${addMemberButtons.length} 'Add Member' button(s) on screen.`);
+
+    // Generate a random index between 0 and the number of buttons found
+    const randomIndex = Math.floor(Math.random() * addMemberButtons.length);
+
+    console.log(`📍 Clicking random 'Add Member' button at index ${randomIndex}...`);
+
+    // Click the randomly selected button
+    await addMemberButtons[randomIndex].click();
+
+    await driver.pause(2500);
+}
 async function selectGender(driver, genderInput) {
     const key = genderInput.toLowerCase();
     let resId = '';
@@ -221,9 +242,10 @@ const RELATION_OPTIONS_MALE = ['Father', 'Brother', 'Husband', 'Nephew', 'Son', 
 
 async function selectRelationWithHof(driver, relation, gender = 'female') {
     const key = gender.toLowerCase();
-    const formatted = relation.replace(/\w\S*/g,
-        w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
-    );
+
+    // Use the relation string exactly as it is passed from the array,
+    // removing the Title Case modification that breaks "in Law"
+    const formatted = relation;
 
     let optionsList = RELATION_OPTIONS_FEMALE;
     if (key === 'male') {
@@ -238,7 +260,6 @@ async function selectRelationWithHof(driver, relation, gender = 'female') {
 
     console.log(`✅ Relation → "${formatted}"`);
 }
-
 async function clickOkButton(driver) {
     console.log(`⏳ Clicking Ok button...`);
     const okBtn = await driver.$('android=new UiSelector().resourceId("org.piramalswasthya.sakhi.saksham.uat:id/btn_ok")');
@@ -326,46 +347,61 @@ async function clickDashboardCard(driver, cardText) {
     console.log(`✅ Clicked card: "${cardText.replace('\n', ' ')}"`);
 }
 
-async function clickRandomAddMember(driver) {
-    console.log(`⏳ Looking for a random "Add Member" button on the screen...`);
+async function searchAndAddMember(driver, searchName) {
+    const searchBar = await driver.$(
+        '//android.widget.EditText[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/searchView"]'
+    );
+    await searchBar.waitForDisplayed({ timeout: 10000 });
 
-    // Fetch all buttons currently visible on the screen with the text "Add Member"
-    const addMemberButtons = await driver.$$('//android.widget.Button[@text="Add Member"]');
+    // CHANGED: Use setValue() instead of clicking and sending array keys
+    await searchBar.setValue(searchName);
 
-    if (addMemberButtons.length === 0) {
-        throw new Error('❌ No "Add Member" buttons found on the current screen.');
-    }
+    if (await driver.isKeyboardShown()) await driver.hideKeyboard();
+    await driver.pause(2000);
 
-    // Generate a random index based on how many buttons are found
-    const randomIndex = Math.floor(Math.random() * addMemberButtons.length);
-    const selectedBtn = addMemberButtons[randomIndex];
+    const formattedName = searchName.toUpperCase();
+    const addBtn = await driver.$(
+        `//android.widget.TextView[@text="${formattedName}"]` +
+        `/ancestor::android.widget.FrameLayout` +
+        `[@resource-id="org.piramalswasthya.sakhi.saksham.uat:id/parentCard"]` +
+        `//android.widget.Button[@text="Add Member"]`
+    );
+    await addBtn.waitForDisplayed({ timeout: 10000 });
+    await addBtn.click();
+    console.log(`✅ Clicked "Add Member" for ${formattedName}`);
 
-    // Ensure it's displayed and click it
-    await selectedBtn.waitForDisplayed({ timeout: 10000 });
-    await selectedBtn.click();
-
-    console.log(`✅ Clicked random "Add Member" button (Choice ${randomIndex + 1} of ${addMemberButtons.length}).`);
     await driver.pause(2500);
 }
 
-async function runTest(externalDriver = null, testData = {}) { // 👈 Add testData parameter
+async function runTest(externalDriver = null) {
 
     const isStandalone = !externalDriver;
     const driver = externalDriver || await remote({ path: '/', port: 4723, capabilities });
 
+    // 1. Randomly pick a gender
+    const genderOptions = ['Male', 'Female'];
+    const randomGender = genderOptions[Math.floor(Math.random() * genderOptions.length)];
+
+    // 2. Randomly pick a relation based on the selected gender
+    let randomRelation = '';
+    if (randomGender.toLowerCase() === 'male') {
+        randomRelation = RELATION_OPTIONS_MALE[Math.floor(Math.random() * RELATION_OPTIONS_MALE.length)];
+    } else {
+        randomRelation = RELATION_OPTIONS_FEMALE[Math.floor(Math.random() * RELATION_OPTIONS_FEMALE.length)];
+    }
+
     const TEST = {
-        searchName   : testData.searchName || 'UMA CHK', // 👈 Use dynamic name
-        gender       : testData.gender || 'Female',
-        relation     : testData.relation || 'Mother',
+        gender: randomGender,
+        relation: randomRelation,
     };
 
     try {
-        console.log(`🚀 Starting add member test for ${TEST.searchName}...`);
+        console.log(`🚀 Starting add member test with random data -> Gender: ${TEST.gender}, Relation: ${TEST.relation}`);
 
         // 1. Open household list
         await clickDashboardCard(driver, 'All\nHousehold');
 
-        // 2. Search and open Add Member dialog
+        // 2. Click a RANDOM "Add Member" button instead of searching
         await clickRandomAddMember(driver);
 
         // 3. Interact with dialog using Native Elements
@@ -383,7 +419,6 @@ async function runTest(externalDriver = null, testData = {}) { // 👈 Add testD
 
     } catch (err) {
         console.error('❌ Test failed:', err);
-        throw err; // 👈 Ensure the error bubbles up
     } finally {
         if (isStandalone) {
             console.log('🧹 Ending standalone session...');
